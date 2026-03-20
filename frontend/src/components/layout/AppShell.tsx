@@ -16,6 +16,13 @@ const navigation = [
 export function AppShell({ title, children }: { title: string; children: React.ReactNode }) {
   const session = useAuthStore((state) => state.session);
   const clearSession = useAuthStore((state) => state.clearSession);
+  const displayName = session?.displayName ?? "User";
+  const initials = displayName
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
 
   return (
     <div className="app-shell">
@@ -28,6 +35,7 @@ export function AppShell({ title, children }: { title: string; children: React.R
           </div>
         </div>
 
+        <p className="sidebar__section-label">Workspace</p>
         <nav className="sidebar__nav">
           {navigation.map((item) => {
             const Icon = item.icon;
@@ -53,8 +61,11 @@ export function AppShell({ title, children }: { title: string; children: React.R
             <h1>{title}</h1>
           </div>
           <div className="topbar__profile">
-            <span>{session?.displayName ?? "User"}</span>
-            <small>{session?.email}</small>
+            <div className="topbar__profile-badge">{initials || "U"}</div>
+            <div>
+              <span>{displayName}</span>
+              <small>{session?.email}</small>
+            </div>
           </div>
         </header>
 

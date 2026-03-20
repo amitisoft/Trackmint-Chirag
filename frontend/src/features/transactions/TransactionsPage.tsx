@@ -120,7 +120,7 @@ export function TransactionsPage() {
 
   return (
     <AppShell title="Transactions">
-      <Card title="Filters" subtitle="Search by note or merchant and narrow by account, category, or transaction type.">
+      <Card title="Filters" subtitle="Search by note or merchant and narrow by account, category, or transaction type." className="page-section page-section--filters">
         <div className="toolbar-grid">
           <input placeholder="Search merchant or note" value={filters.search} onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))} />
           <select value={filters.type} onChange={(event) => setFilters((current) => ({ ...current, type: event.target.value }))}>
@@ -151,7 +151,7 @@ export function TransactionsPage() {
         </div>
       </Card>
 
-      <Card title="Transaction list" subtitle={`${data?.totalCount ?? 0} records`}>
+      <Card title="Transaction list" subtitle={`${data?.totalCount ?? 0} records`} className="page-section page-section--table">
         <div className="table-wrap">
           <table className="data-table">
             <thead>

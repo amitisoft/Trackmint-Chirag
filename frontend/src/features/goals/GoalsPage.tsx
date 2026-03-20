@@ -112,7 +112,7 @@ export function GoalsPage() {
   return (
     <AppShell title="Savings Goals">
       <div className="page-grid page-grid--two">
-        <Card title="Goal progress" subtitle="Track funding status, contributions, and withdrawals.">
+        <Card title="Goal progress" subtitle="Track funding status, contributions, and withdrawals." className="page-section page-section--list">
           <div className="list-stack">
             {goals.map((goal) => (
               <div key={goal.id} className="budget-item">
@@ -158,7 +158,7 @@ export function GoalsPage() {
           </div>
         </Card>
 
-        <Card title="Create goal" subtitle="Track major savings targets and contributions.">
+        <Card title="Create goal" subtitle="Track major savings targets and contributions." className="page-section page-section--form">
           <GoalForm form={form} accounts={accounts} onSubmit={(values) => saveMutation.mutate(values)} isLoading={saveMutation.isPending} />
         </Card>
       </div>

@@ -103,7 +103,7 @@ export function RecurringPage() {
   return (
     <AppShell title="Recurring Transactions">
       <div className="page-grid page-grid--two">
-        <Card title="Recurring schedule" subtitle="Bills, subscriptions, salaries, and auto-generated items.">
+        <Card title="Recurring schedule" subtitle="Bills, subscriptions, salaries, and auto-generated items." className="page-section page-section--list">
           <div className="list-stack">
             {items.map((item) => (
               <div key={item.id} className="list-row list-row--aligned">
@@ -125,7 +125,7 @@ export function RecurringPage() {
           </div>
         </Card>
 
-        <Card title="New recurring item" subtitle="Set frequency, account, and optional auto-generation.">
+        <Card title="New recurring item" subtitle="Set frequency, account, and optional auto-generation." className="page-section page-section--form">
           <RecurringForm form={form} accounts={accounts} categories={categories} onSubmit={(values) => mutation.mutate(values)} isLoading={mutation.isPending} />
         </Card>
       </div>

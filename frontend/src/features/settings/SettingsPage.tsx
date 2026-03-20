@@ -75,7 +75,7 @@ export function SettingsPage() {
   return (
     <AppShell title="Settings & Categories">
       <div className="page-grid page-grid--two">
-        <Card title="Categories" subtitle="Manage custom income and expense categories.">
+        <Card title="Categories" subtitle="Manage custom income and expense categories." className="page-section page-section--list">
           <div className="list-stack">
             {categories.map((category) => (
               <div key={category.id} className="list-row list-row--aligned">
@@ -104,7 +104,7 @@ export function SettingsPage() {
           </div>
         </Card>
 
-        <Card title="New category" subtitle="Keep your reporting taxonomy clean and consistent.">
+        <Card title="New category" subtitle="Keep your reporting taxonomy clean and consistent." className="page-section page-section--form">
           <CategoryForm onSubmit={(values) => saveMutation.mutate(values)} form={form} isLoading={saveMutation.isPending} />
         </Card>
       </div>

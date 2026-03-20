@@ -80,7 +80,7 @@ export function BudgetsPage() {
   return (
     <AppShell title="Budgets">
       <div className="page-grid page-grid--two">
-        <Card title="Current month budgets" subtitle="Budget vs actual spend with visual utilization.">
+        <Card title="Current month budgets" subtitle="Budget vs actual spend with visual utilization." className="page-section page-section--list">
           <div className="budget-card-stack">
             {budgets.map((budget) => (
               <div key={budget.id} className="budget-item">
@@ -110,7 +110,7 @@ export function BudgetsPage() {
           </div>
         </Card>
 
-        <Card title="Set budget" subtitle="Each category can have one budget per month.">
+        <Card title="Set budget" subtitle="Each category can have one budget per month." className="page-section page-section--form">
           <BudgetForm categories={categories} form={form} onSubmit={(values) => mutation.mutate(values)} isLoading={mutation.isPending} disabledCategory={Boolean(editing)} />
         </Card>
       </div>

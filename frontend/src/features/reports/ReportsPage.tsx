@@ -87,7 +87,7 @@ export function ReportsPage() {
 
   return (
     <AppShell title="Reports">
-      <Card title="Filters" subtitle="Refine date range, account, category, and transaction type.">
+      <Card title="Filters" subtitle="Refine date range, account, category, and transaction type." className="page-section page-section--filters">
         <div className="toolbar-grid">
           <input type="date" value={filters.startDate ?? ""} onChange={(event) => setFilters((current) => ({ ...current, startDate: event.target.value }))} />
           <input type="date" value={filters.endDate ?? ""} onChange={(event) => setFilters((current) => ({ ...current, endDate: event.target.value }))} />

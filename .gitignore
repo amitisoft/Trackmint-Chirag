@@ -31,3 +31,7 @@ backend/PersonalFinanceTracker.Api/appsettings.Development.json
 **/*.user
 **/*.suo
 **/*.pfx
+
+# Docs
+docs/**
+!docs/SETUP.md

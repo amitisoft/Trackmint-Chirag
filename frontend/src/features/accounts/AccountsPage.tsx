@@ -75,7 +75,7 @@ export function AccountsPage() {
   return (
     <AppShell title="Accounts">
       <div className="page-grid page-grid--two">
-        <Card title="Your accounts" subtitle="Balances across your bank, wallet, card, and savings accounts.">
+        <Card title="Your accounts" subtitle="Balances across your bank, wallet, card, and savings accounts." className="page-section page-section--list">
           <div className="list-stack">
             {accounts.map((account) => (
               <div key={account.id} className="list-row list-row--aligned">
@@ -97,7 +97,7 @@ export function AccountsPage() {
           </div>
         </Card>
 
-        <Card title="New account" subtitle="Create bank, cash, card, or savings accounts.">
+        <Card title="New account" subtitle="Create bank, cash, card, or savings accounts." className="page-section page-section--form">
           <form className="form-grid" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
             <label>
               Name
