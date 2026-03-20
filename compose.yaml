@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: personal_finance_tracker
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - finance-db:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: ./backend/PersonalFinanceTracker.Api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=personal_finance_tracker;Username=postgres;Password=postgres
+      Jwt__Issuer: TrackMint
+      Jwt__Audience: TrackMint.Client
+      Jwt__SigningKey: replace-this-in-production-with-a-long-random-key
+      AllowedOrigins__0: http://localhost:4173
+    depends_on:
+      - db
+    ports:
+      - "8080:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: http://localhost:8080/api
+    depends_on:
+      - backend
+    ports:
+      - "4173:80"
+
+volumes:
+  finance-db:

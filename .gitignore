@@ -1,0 +1,33 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Root env
+.env
+.env.local
+.env.*.local
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+frontend/.env
+frontend/.env.local
+
+# .NET
+backend/**/bin/
+backend/**/obj/
+backend/.vs/
+backend/*.log
+
+# Tooling state
+.dotnet/
+
+# Local secrets
+backend/PersonalFinanceTracker.Api/appsettings.Development.json
+**/appsettings.Local.json
+**/*.user
+**/*.suo
+**/*.pfx

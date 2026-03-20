@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <Compile Include="..\PersonalFinanceTracker.Domain\**\*.cs" Exclude="..\PersonalFinanceTracker.Domain\bin\**\*;..\PersonalFinanceTracker.Domain\obj\**\*" Link="Domain\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\PersonalFinanceTracker.Application\**\*.cs" Exclude="..\PersonalFinanceTracker.Application\bin\**\*;..\PersonalFinanceTracker.Application\obj\**\*" Link="Application\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\PersonalFinanceTracker.Infrastructure\**\*.cs" Exclude="..\PersonalFinanceTracker.Infrastructure\bin\**\*;..\PersonalFinanceTracker.Infrastructure\obj\**\*" Link="Infrastructure\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>

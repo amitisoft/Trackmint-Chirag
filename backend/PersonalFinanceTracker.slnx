@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="PersonalFinanceTracker.Api/PersonalFinanceTracker.Api.csproj" />
+  <Project Path="PersonalFinanceTracker.Application/PersonalFinanceTracker.Application.csproj" />
+  <Project Path="PersonalFinanceTracker.Domain/PersonalFinanceTracker.Domain.csproj" />
+  <Project Path="PersonalFinanceTracker.Infrastructure/PersonalFinanceTracker.Infrastructure.csproj" />
+</Solution>
