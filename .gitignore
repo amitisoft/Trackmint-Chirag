@@ -24,6 +24,9 @@ backend/*.log
 
 # Tooling state
 .dotnet/
+backend-build-check/
+publish/
+*.zip
 
 # Local secrets
 backend/PersonalFinanceTracker.Api/appsettings.Development.json

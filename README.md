@@ -1,11 +1,11 @@
 # TrackMint
 
-Full-stack hackathon implementation of TrackMint built with:
+TrackMint is a full-stack personal finance tracker built with:
 
 - `React + TypeScript`
 - `ASP.NET Core 10 Web API`
 - `PostgreSQL`
-- container-ready files for `Podman`
+- `Podman`-ready container configuration
 
 ## Repository Layout
 
@@ -21,7 +21,7 @@ Full-stack hackathon implementation of TrackMint built with:
 `- compose.yaml
 ```
 
-## Core Features
+## Features
 
 - JWT auth with refresh token flow
 - accounts and wallet management
@@ -33,14 +33,13 @@ Full-stack hackathon implementation of TrackMint built with:
 - CSV export
 - responsive UI for desktop and mobile
 
-## Local Development Order
+## Local Development
 
-1. Finish WSL + Podman setup.
-2. Create a PostgreSQL database named `personal_finance_tracker`.
-3. Copy `backend/PersonalFinanceTracker.Api/appsettings.Example.json` into your local `appsettings.Development.json` values if your DB credentials differ.
-4. Restore and run backend.
-5. Install frontend dependencies and run the React app.
-6. Register a test user and start seeding live data from the UI.
+1. Create a PostgreSQL database named `personal_finance_tracker`.
+2. Configure backend settings using `backend/PersonalFinanceTracker.Api/appsettings.Example.json`.
+3. Restore and run the backend.
+4. Install dependencies and run the frontend.
+5. Register a user and start using the application.
 
 ## Swagger API Docs
 
@@ -55,21 +54,15 @@ For protected endpoints, use Swagger's `Authorize` button and enter:
 Bearer YOUR_ACCESS_TOKEN
 ```
 
-## GitHub Safety
+## Configuration Notes
 
 - `backend/PersonalFinanceTracker.Api/appsettings.Development.json` is for your local machine only and is ignored by Git.
 - `frontend/.env.example` is committed as the frontend environment template.
 - `backend/PersonalFinanceTracker.Api/appsettings.Example.json` is committed as the backend environment template.
 - Do not commit real database passwords, JWT production keys, Azure secrets, or personal `.env` files.
 
-Detailed setup:
+## Documentation
 
 - [Backend README](./backend/README.md)
 - [Frontend README](./frontend/README.md)
 - [Setup Notes](./docs/SETUP.md)
-- [GitHub Push Guide](./docs/GITHUB_PUSH.md)
-- [Deployment Notes](./docs/DEPLOYMENT.md)
-
-## Status
-
-Azure deployment is intentionally left pending until you share the company deployment doc. The repo is structured so we can add Azure-specific container and service wiring without rewriting the app.
