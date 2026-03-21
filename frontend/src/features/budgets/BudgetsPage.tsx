@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "../../components/layout/AppShell";
 import { Card } from "../../components/common/Card";
 import { Modal } from "../../components/common/Modal";
+import { OverflowMenu } from "../../components/common/OverflowMenu";
 import { api } from "../../services/api/client";
 import { useToast } from "../../components/common/ToastProvider";
 import type { Budget, Category } from "../../types/models";
@@ -23,6 +24,7 @@ const budgetSchema = z.object({
 type BudgetFormValues = z.infer<typeof budgetSchema>;
 
 export function BudgetsPage() {
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Budget | null>(null);
   const queryClient = useQueryClient();
   const { showToast } = useToast();
@@ -64,6 +66,7 @@ export function BudgetsPage() {
       queryClient.invalidateQueries({ queryKey: ["budgets"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
       showToast(editing ? "Budget updated" : "Budget created");
+      setIsCreateOpen(false);
       setEditing(null);
     },
   });
@@ -79,26 +82,35 @@ export function BudgetsPage() {
 
   return (
     <AppShell title="Budgets">
-      <div className="page-grid page-grid--two">
-        <Card title="Current month budgets" subtitle="Budget vs actual spend with visual utilization." className="page-section page-section--list">
+      <Card
+        title="Current month budgets"
+        subtitle="Budget vs actual spend with visual utilization."
+        className="page-section page-section--list"
+        actions={
+          <button type="button" className="primary-button" onClick={() => {
+            setEditing(null);
+            setIsCreateOpen(true);
+          }}>
+            Set budget
+          </button>
+        }
+      >
           <div className="budget-card-stack">
             {budgets.map((budget) => (
               <div key={budget.id} className="budget-item">
                 <div className="budget-item__header">
-                  <div>
+                  <div className="budget-item__copy">
                     <strong>{budget.categoryName}</strong>
-                    <span>
+                    <span className="budget-item__amount">
                       {budget.actualSpend.toFixed(0)} / {budget.amount.toFixed(0)}
                     </span>
                   </div>
-                  <div className="inline-actions">
-                    <button type="button" className="ghost-button" onClick={() => setEditing(budget)}>
-                      Edit
-                    </button>
-                    <button type="button" className="ghost-button ghost-button--danger" onClick={() => deleteMutation.mutate(budget.id)}>
-                      Delete
-                    </button>
-                  </div>
+                  <OverflowMenu
+                    actions={[
+                      { label: "Edit", onClick: () => setEditing(budget) },
+                      { label: "Delete", onClick: () => deleteMutation.mutate(budget.id), tone: "danger" },
+                    ]}
+                  />
                 </div>
                 <div className="progress-track">
                   <div className="progress-fill" style={{ width: `${Math.min(budget.utilizationPercent, 100)}%`, background: budget.categoryColor }} />
@@ -106,17 +118,15 @@ export function BudgetsPage() {
                 <small className="muted-copy">{budget.utilizationPercent.toFixed(0)}% utilized</small>
               </div>
             ))}
-            {!budgets.length && <div className="empty-state">No budgets for this month yet. Seed data or create one on the right.</div>}
+            {!budgets.length && <div className="empty-state">No budgets for this month yet. Use the button above to create one.</div>}
           </div>
-        </Card>
+      </Card>
 
-        <Card title="Set budget" subtitle="Each category can have one budget per month." className="page-section page-section--form">
-          <BudgetForm categories={categories} form={form} onSubmit={(values) => mutation.mutate(values)} isLoading={mutation.isPending} disabledCategory={Boolean(editing)} />
-        </Card>
-      </div>
-
-      <Modal open={Boolean(editing)} title={`Edit ${editing?.categoryName ?? "budget"}`} onClose={() => setEditing(null)}>
-        <BudgetForm categories={categories} form={form} onSubmit={(values) => mutation.mutate(values)} isLoading={mutation.isPending} disabledCategory />
+      <Modal open={isCreateOpen || Boolean(editing)} title={editing ? `Edit ${editing.categoryName}` : "Set budget"} onClose={() => {
+        setIsCreateOpen(false);
+        setEditing(null);
+      }}>
+        <BudgetForm categories={categories} form={form} onSubmit={(values) => mutation.mutate(values)} isLoading={mutation.isPending} disabledCategory={Boolean(editing)} />
       </Modal>
     </AppShell>
   );
@@ -139,8 +149,8 @@ function BudgetForm({
     <form className="form-grid" onSubmit={form.handleSubmit(onSubmit)}>
       <label>
         Category
-        <select {...form.register("categoryId")} disabled={disabledCategory}>
-          <option value="">Select category</option>
+        <select {...form.register("categoryId")} disabled={disabledCategory || !categories.filter((category) => category.type === "Expense").length}>
+          <option value="">{categories.filter((category) => category.type === "Expense").length ? "Select category" : "Create an expense category first"}</option>
           {categories
             .filter((category) => category.type === "Expense")
             .map((category) => (
@@ -149,6 +159,7 @@ function BudgetForm({
               </option>
             ))}
         </select>
+        {!categories.filter((category) => category.type === "Expense").length && <small className="field-hint field-hint--warning">No expense category available. Create one in Settings first.</small>}
       </label>
       <label>
         Month

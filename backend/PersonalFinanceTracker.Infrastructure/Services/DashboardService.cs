@@ -62,7 +62,6 @@ public sealed class DashboardService(
                 Color = group.Key.Color
             })
             .OrderByDescending(x => x.Value)
-            .Take(6)
             .ToArray();
 
         var trendPoints = await BuildTrendAsync(userId, today, cancellationToken);

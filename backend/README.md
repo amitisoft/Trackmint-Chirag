@@ -37,6 +37,19 @@ dotnet restore .\PersonalFinanceTracker.Api\PersonalFinanceTracker.Api.csproj
 dotnet run --project .\PersonalFinanceTracker.Api\PersonalFinanceTracker.Api.csproj
 ```
 
+## Swagger
+
+When the API is running locally, Swagger UI is available at:
+
+- `http://localhost:5151/swagger`
+- `https://localhost:7293/swagger`
+
+To test secured endpoints, click `Authorize` and provide:
+
+```text
+Bearer YOUR_ACCESS_TOKEN
+```
+
 ## Config Files
 
 - `PersonalFinanceTracker.Api/appsettings.json`: safe shared defaults for repo and container-oriented local setup

@@ -1,5 +1,6 @@
-import { NavLink } from "react-router-dom";
-import { LayoutDashboard, ArrowLeftRight, PiggyBank, Target, ChartColumnBig, Repeat2, WalletCards, Settings, LogOut } from "lucide-react";
+import { useEffect, useState } from "react";
+import { NavLink, useLocation } from "react-router-dom";
+import { LayoutDashboard, ArrowLeftRight, PiggyBank, Target, ChartColumnBig, Repeat2, WalletCards, Settings, LogOut, Menu, X } from "lucide-react";
 import { useAuthStore } from "../../store/auth-store";
 
 const navigation = [
@@ -16,6 +17,8 @@ const navigation = [
 export function AppShell({ title, children }: { title: string; children: React.ReactNode }) {
   const session = useAuthStore((state) => state.session);
   const clearSession = useAuthStore((state) => state.clearSession);
+  const location = useLocation();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const displayName = session?.displayName ?? "User";
   const initials = displayName
     .split(" ")
@@ -24,9 +27,14 @@ export function AppShell({ title, children }: { title: string; children: React.R
     .map((part) => part[0]?.toUpperCase())
     .join("");
 
+  useEffect(() => {
+    setIsMenuOpen(false);
+  }, [location.pathname]);
+
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
+    <div className={`app-shell ${isMenuOpen ? "app-shell--menu-open" : ""}`.trim()}>
+      <div className={`sidebar-backdrop ${isMenuOpen ? "sidebar-backdrop--visible" : ""}`.trim()} onClick={() => setIsMenuOpen(false)} aria-hidden={!isMenuOpen} />
+      <aside className={`sidebar ${isMenuOpen ? "sidebar--open" : ""}`.trim()}>
         <div className="brand">
           <div className="brand__badge">TM</div>
           <div>
@@ -57,7 +65,12 @@ export function AppShell({ title, children }: { title: string; children: React.R
       <main className="main-panel">
         <header className="topbar">
           <div>
-            <p className="eyebrow">Finance cockpit</p>
+            <div className="topbar__title-row">
+              <button type="button" className="ghost-button mobile-menu-button" onClick={() => setIsMenuOpen((current) => !current)} aria-label={isMenuOpen ? "Close navigation" : "Open navigation"}>
+                {isMenuOpen ? <X size={18} /> : <Menu size={18} />}
+              </button>
+              <p className="eyebrow">Finance cockpit</p>
+            </div>
             <h1>{title}</h1>
           </div>
           <div className="topbar__profile">

@@ -42,6 +42,19 @@ Full-stack hackathon implementation of TrackMint built with:
 5. Install frontend dependencies and run the React app.
 6. Register a test user and start seeding live data from the UI.
 
+## Swagger API Docs
+
+After starting the backend locally, Swagger is available at:
+
+- `http://localhost:5151/swagger`
+- `https://localhost:7293/swagger`
+
+For protected endpoints, use Swagger's `Authorize` button and enter:
+
+```text
+Bearer YOUR_ACCESS_TOKEN
+```
+
 ## GitHub Safety
 
 - `backend/PersonalFinanceTracker.Api/appsettings.Development.json` is for your local machine only and is ignored by Git.

@@ -26,6 +26,7 @@ function formatCurrency(value: number) {
 }
 
 export function AccountsPage() {
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Account | null>(null);
   const queryClient = useQueryClient();
   const { showToast } = useToast();
@@ -67,6 +68,7 @@ export function AccountsPage() {
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
       showToast(editing ? "Account updated" : "Account created");
+      setIsCreateOpen(false);
       setEditing(null);
       form.reset({ name: "", type: "BankAccount", openingBalance: 0, institutionName: "" });
     },
@@ -74,8 +76,19 @@ export function AccountsPage() {
 
   return (
     <AppShell title="Accounts">
-      <div className="page-grid page-grid--two">
-        <Card title="Your accounts" subtitle="Balances across your bank, wallet, card, and savings accounts." className="page-section page-section--list">
+      <Card
+        title="Your accounts"
+        subtitle="Balances across your bank, wallet, card, and savings accounts."
+        className="page-section page-section--list"
+        actions={
+          <button type="button" className="primary-button" onClick={() => {
+            setEditing(null);
+            setIsCreateOpen(true);
+          }}>
+            New account
+          </button>
+        }
+      >
           <div className="list-stack">
             {accounts.map((account) => (
               <div key={account.id} className="list-row list-row--aligned">
@@ -95,41 +108,12 @@ export function AccountsPage() {
             ))}
             {!accounts.length && <div className="empty-state">No accounts yet. Create one to start tracking balances.</div>}
           </div>
-        </Card>
+      </Card>
 
-        <Card title="New account" subtitle="Create bank, cash, card, or savings accounts." className="page-section page-section--form">
-          <form className="form-grid" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
-            <label>
-              Name
-              <input type="text" {...form.register("name")} />
-              <small>{form.formState.errors.name?.message}</small>
-            </label>
-            <label>
-              Type
-              <select {...form.register("type")}>
-                {accountTypes.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Opening balance
-              <input type="number" step="0.01" {...form.register("openingBalance", { valueAsNumber: true })} />
-            </label>
-            <label>
-              Institution
-              <input type="text" {...form.register("institutionName")} />
-            </label>
-            <button type="submit" className="primary-button" disabled={mutation.isPending}>
-              {mutation.isPending ? "Saving..." : "Save account"}
-            </button>
-          </form>
-        </Card>
-      </div>
-
-      <Modal open={Boolean(editing)} title={`Edit ${editing?.name ?? "account"}`} onClose={() => setEditing(null)}>
+      <Modal open={isCreateOpen || Boolean(editing)} title={editing ? `Edit ${editing.name}` : "New account"} onClose={() => {
+        setIsCreateOpen(false);
+        setEditing(null);
+      }}>
         <form className="form-grid" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
           <label>
             Name
@@ -154,7 +138,7 @@ export function AccountsPage() {
             <input type="text" {...form.register("institutionName")} />
           </label>
           <button type="submit" className="primary-button" disabled={mutation.isPending}>
-            Update account
+            {mutation.isPending ? "Saving..." : editing ? "Update account" : "Save account"}
           </button>
         </form>
       </Modal>

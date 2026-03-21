@@ -14,6 +14,23 @@ function tooltipCurrency(value: number | string | readonly (number | string)[] |
   return currency(normalized);
 }
 
+function DonutTooltip({ active, payload }: { active?: boolean; payload?: Array<{ name?: string; value?: number | string }> }) {
+  if (!active || !payload?.length) {
+    return null;
+  }
+
+  const item = payload[0];
+  const label = item.name ?? "";
+  const value = Number(item.value ?? 0);
+
+  return (
+    <div className="chart-tooltip chart-tooltip--donut">
+      <strong>{label}</strong>
+      <span>{tooltipCurrency(value)}</span>
+    </div>
+  );
+}
+
 export function DashboardPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard-summary"],
@@ -28,6 +45,9 @@ export function DashboardPage() {
     { label: "Current Month Expense", value: data?.currentMonthExpense ?? 0, tone: "danger" },
     { label: "Net Balance", value: data?.netBalance ?? 0, tone: "primary" },
   ];
+  const categorySpend = data?.spendingByCategory ?? [];
+  const totalCategorySpend = categorySpend.reduce((sum, item) => sum + item.value, 0);
+  const topCategories = categorySpend.slice(0, 6);
 
   return (
     <AppShell title="Dashboard">
@@ -60,17 +80,46 @@ export function DashboardPage() {
 
         <Card title="Spending by Category" className="dashboard-card dashboard-card--chart">
           <div className="chart-box">
-            {(data?.spendingByCategory?.length ?? 0) > 0 ? (
-              <ResponsiveContainer width="100%" height={280}>
-                <PieChart>
-                  <Pie data={data?.spendingByCategory ?? []} dataKey="value" nameKey="label" innerRadius={70} outerRadius={100}>
-                    {(data?.spendingByCategory ?? []).map((item) => (
-                      <Cell key={item.label} fill={item.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value) => tooltipCurrency(value)} />
-                </PieChart>
-              </ResponsiveContainer>
+            {categorySpend.length > 0 ? (
+              <div className="donut-panel">
+                <div className="donut-panel__visual">
+                  <ResponsiveContainer width="100%" height={280}>
+                    <PieChart>
+                      <Pie data={categorySpend} dataKey="value" nameKey="label" innerRadius={78} outerRadius={108} stroke="none">
+                        {categorySpend.map((item) => (
+                          <Cell key={item.label} fill={item.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        content={<DonutTooltip />}
+                        cursor={false}
+                        allowEscapeViewBox={{ x: true, y: true }}
+                        position={{ x: 252, y: 108 }}
+                        wrapperStyle={{ pointerEvents: "none", zIndex: 8 }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="donut-panel__center">
+                    <span>Total spend</span>
+                    <strong>{currency(totalCategorySpend)}</strong>
+                  </div>
+                </div>
+
+                <div className="donut-panel__legend">
+                  {topCategories.map((item) => (
+                    <div key={item.label} className="donut-legend-item">
+                      <div className="donut-legend-item__copy">
+                        <span className="category-chip__dot category-chip__dot--large" style={{ background: item.color }} />
+                        <div>
+                          <strong>{item.label}</strong>
+                          <small>{((item.value / totalCategorySpend) * 100 || 0).toFixed(0)}% of spend</small>
+                        </div>
+                      </div>
+                      <strong>{currency(item.value)}</strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
             ) : (
               <div className="empty-state">No spending data for the current month yet.</div>
             )}

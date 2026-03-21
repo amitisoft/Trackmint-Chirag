@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -6,6 +6,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "../../components/layout/AppShell";
 import { Card } from "../../components/common/Card";
 import { Modal } from "../../components/common/Modal";
+import { OverflowMenu } from "../../components/common/OverflowMenu";
+import { Pagination } from "../../components/common/Pagination";
 import { api } from "../../services/api/client";
 import { useToast } from "../../components/common/ToastProvider";
 import type { Account, Category, PagedResult, Transaction, TransactionType } from "../../types/models";
@@ -30,10 +32,13 @@ function formatCurrency(value: number) {
 }
 
 export function TransactionsPage() {
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [filters, setFilters] = useState({ search: "", type: "All", accountId: "All", categoryId: "All" });
+  const [page, setPage] = useState(1);
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const pageSize = 10;
 
   const { data: accounts = [] } = useQuery({
     queryKey: ["accounts"],
@@ -46,7 +51,7 @@ export function TransactionsPage() {
   });
 
   const { data } = useQuery({
-    queryKey: ["transactions", filters],
+    queryKey: ["transactions", filters, page],
     queryFn: async () => {
       const response = await api.get<PagedResult<Transaction>>("/transactions", {
         params: {
@@ -54,12 +59,20 @@ export function TransactionsPage() {
           type: filters.type === "All" ? undefined : filters.type,
           accountId: filters.accountId === "All" ? undefined : filters.accountId,
           categoryId: filters.categoryId === "All" ? undefined : filters.categoryId,
-          pageSize: 50,
+          page,
+          pageSize,
         },
       });
       return response.data;
     },
   });
+
+  useEffect(() => {
+    setPage(1);
+  }, [filters.search, filters.type, filters.accountId, filters.categoryId]);
+
+  const totalPages = Math.max(1, Math.ceil((data?.totalCount ?? 0) / pageSize));
+  const currentPage = Math.min(page, totalPages);
 
   const defaultValues = useMemo(
     () => ({
@@ -91,7 +104,7 @@ export function TransactionsPage() {
         tags: values.tags ? values.tags.split(",").map((item) => item.trim()).filter(Boolean) : [],
       };
 
-      if (editing) {
+      if (editing?.id) {
         await api.put(`/transactions/${editing.id}`, payload);
       } else {
         await api.post("/transactions", payload);
@@ -102,6 +115,7 @@ export function TransactionsPage() {
       queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
       showToast(editing ? "Transaction updated" : "Transaction saved");
+      setIsCreateOpen(false);
       setEditing(null);
     },
   });
@@ -145,10 +159,18 @@ export function TransactionsPage() {
               </option>
             ))}
           </select>
-          <button type="button" className="primary-button" onClick={() => setEditing({} as Transaction)}>
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => {
+              setEditing(null);
+              setIsCreateOpen(true);
+            }}
+          >
             Add transaction
           </button>
         </div>
+        {!accounts.length && <small className="field-hint field-hint--warning">No accounts yet. Create an account first before adding or filtering transactions meaningfully.</small>}
       </Card>
 
       <Card title="Transaction list" subtitle={`${data?.totalCount ?? 0} records`} className="page-section page-section--table">
@@ -174,13 +196,20 @@ export function TransactionsPage() {
                   <td>{item.accountName}</td>
                   <td>{item.type}</td>
                   <td>{formatCurrency(item.amount)}</td>
-                  <td className="inline-actions">
-                    <button type="button" className="ghost-button" onClick={() => setEditing(item)}>
-                      Edit
-                    </button>
-                    <button type="button" className="ghost-button ghost-button--danger" onClick={() => deleteMutation.mutate(item.id)}>
-                      Delete
-                    </button>
+                  <td className="table-actions">
+                    <OverflowMenu
+                      actions={[
+                        {
+                          label: "Edit",
+                          onClick: () => setEditing(item),
+                        },
+                        {
+                          label: "Delete",
+                          onClick: () => deleteMutation.mutate(item.id),
+                          tone: "danger",
+                        },
+                      ]}
+                    />
                   </td>
                 </tr>
               ))}
@@ -194,9 +223,17 @@ export function TransactionsPage() {
             </tbody>
           </table>
         </div>
+        <Pagination page={currentPage} totalPages={totalPages} onPageChange={setPage} />
       </Card>
 
-      <Modal open={editing !== null} title={editing?.id ? "Edit transaction" : "Add transaction"} onClose={() => setEditing(null)}>
+      <Modal
+        open={isCreateOpen || editing !== null}
+        title={editing?.id ? "Edit transaction" : "Add transaction"}
+        onClose={() => {
+          setIsCreateOpen(false);
+          setEditing(null);
+        }}
+      >
         <form className="form-grid" onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}>
           <label>
             Type
@@ -216,18 +253,20 @@ export function TransactionsPage() {
           </label>
           <label>
             Source account
-            <select {...form.register("accountId")}>
+            <select {...form.register("accountId")} disabled={!accounts.length}>
+              {!accounts.length && <option value="">Create an account first</option>}
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>
                   {account.name}
                 </option>
               ))}
             </select>
+            {!accounts.length && <small className="field-hint field-hint--warning">No source account available. Create one in Accounts first.</small>}
           </label>
           {form.watch("type") === "Transfer" ? (
             <label>
               Destination account
-              <select {...form.register("destinationAccountId")}>
+              <select {...form.register("destinationAccountId")} disabled={accounts.length < 2}>
                 <option value="">Select account</option>
                 {accounts.map((account) => (
                   <option key={account.id} value={account.id}>
@@ -235,12 +274,13 @@ export function TransactionsPage() {
                   </option>
                 ))}
               </select>
+              {accounts.length < 2 && <small className="field-hint field-hint--warning">Create at least two accounts before recording a transfer.</small>}
             </label>
           ) : (
             <label>
               Category
-              <select {...form.register("categoryId")}>
-                <option value="">Select category</option>
+              <select {...form.register("categoryId")} disabled={!categories.filter((category) => category.type === form.watch("type")).length}>
+                <option value="">{categories.filter((category) => category.type === form.watch("type")).length ? "Select category" : "Create a matching category first"}</option>
                 {categories
                   .filter((category) => category.type === form.watch("type"))
                   .map((category) => (
@@ -249,6 +289,9 @@ export function TransactionsPage() {
                     </option>
                   ))}
               </select>
+              {!categories.filter((category) => category.type === form.watch("type")).length && (
+                <small className="field-hint field-hint--warning">No {form.watch("type").toLowerCase()} category found. Create one in Settings first.</small>
+              )}
             </label>
           )}
           <label>

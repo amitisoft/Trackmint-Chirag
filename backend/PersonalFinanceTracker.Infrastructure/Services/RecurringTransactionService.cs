@@ -44,8 +44,17 @@ public sealed class RecurringTransactionService(
             AutoCreateTransaction = request.AutoCreateTransaction
         };
 
+        await using var dbTransaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         await dbContext.RecurringTransactions.AddAsync(item, cancellationToken);
+        var generatedTransactions = item.AutoCreateTransaction
+            ? MaterializeDueTransactions(item, DateOnly.FromDateTime(DateTime.UtcNow))
+            : 0;
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (generatedTransactions > 0)
+        {
+            await balanceService.RecalculateForUserAsync(userId, cancellationToken);
+        }
+        await dbTransaction.CommitAsync(cancellationToken);
         await auditService.WriteAsync(userId, "recurring_created", nameof(RecurringTransaction), item.Id, new { item.Title, item.Amount }, cancellationToken);
 
         return (await Query(userId).SingleAsync(x => x.Id == item.Id, cancellationToken)).ToResponse();
@@ -74,7 +83,16 @@ public sealed class RecurringTransactionService(
         item.AutoCreateTransaction = request.AutoCreateTransaction;
         item.IsPaused = request.IsPaused;
 
+        await using var dbTransaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var generatedTransactions = item.AutoCreateTransaction && !item.IsPaused
+            ? MaterializeDueTransactions(item, DateOnly.FromDateTime(DateTime.UtcNow))
+            : 0;
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (generatedTransactions > 0)
+        {
+            await balanceService.RecalculateForUserAsync(userId, cancellationToken);
+        }
+        await dbTransaction.CommitAsync(cancellationToken);
         await auditService.WriteAsync(userId, "recurring_updated", nameof(RecurringTransaction), item.Id, new { item.Title, item.Amount }, cancellationToken);
 
         return (await Query(userId).SingleAsync(x => x.Id == item.Id, cancellationToken)).ToResponse();
@@ -109,27 +127,10 @@ public sealed class RecurringTransactionService(
 
         foreach (var item in dueItems)
         {
-            while (item.NextRunDate <= today && (item.EndDate == null || item.EndDate >= item.NextRunDate))
+            var generatedTransactions = MaterializeDueTransactions(item, today);
+            if (generatedTransactions > 0)
             {
                 impactedUsers.Add(item.UserId);
-
-                var transaction = new Transaction
-                {
-                    UserId = item.UserId,
-                    AccountId = item.AccountId,
-                    DestinationAccountId = item.Type == TransactionType.Transfer ? item.DestinationAccountId : null,
-                    CategoryId = item.Type == TransactionType.Transfer ? null : item.CategoryId,
-                    Type = item.Type,
-                    Amount = item.Amount,
-                    TransactionDate = item.NextRunDate,
-                    Merchant = item.Title,
-                    Note = "Auto-generated recurring transaction",
-                    Tags = ["recurring", "auto"],
-                    RecurringTransactionId = item.Id
-                };
-
-                await dbContext.Transactions.AddAsync(transaction, cancellationToken);
-                item.NextRunDate = CalculateNextRunDate(item.NextRunDate, item.Frequency);
             }
         }
 
@@ -190,4 +191,33 @@ public sealed class RecurringTransactionService(
             RecurringFrequency.Yearly => current.AddYears(1),
             _ => current.AddMonths(1)
         };
+
+    private int MaterializeDueTransactions(RecurringTransaction item, DateOnly today)
+    {
+        var generatedTransactions = 0;
+
+        while (item.NextRunDate <= today && (item.EndDate == null || item.EndDate >= item.NextRunDate))
+        {
+            var transaction = new Transaction
+            {
+                UserId = item.UserId,
+                AccountId = item.AccountId,
+                DestinationAccountId = item.Type == TransactionType.Transfer ? item.DestinationAccountId : null,
+                CategoryId = item.Type == TransactionType.Transfer ? null : item.CategoryId,
+                Type = item.Type,
+                Amount = item.Amount,
+                TransactionDate = item.NextRunDate,
+                Merchant = item.Title,
+                Note = "Auto-generated recurring transaction",
+                Tags = ["recurring", "auto"],
+                RecurringTransactionId = item.Id
+            };
+
+            dbContext.Transactions.Add(transaction);
+            item.NextRunDate = CalculateNextRunDate(item.NextRunDate, item.Frequency);
+            generatedTransactions++;
+        }
+
+        return generatedTransactions;
+    }
 }

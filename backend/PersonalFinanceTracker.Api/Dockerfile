@@ -2,8 +2,8 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 COPY . .
-RUN dotnet restore PersonalFinanceTracker.Api.csproj
-RUN dotnet publish PersonalFinanceTracker.Api.csproj -c Release -o /app/publish
+RUN dotnet restore PersonalFinanceTracker.Api/PersonalFinanceTracker.Api.csproj
+RUN dotnet publish PersonalFinanceTracker.Api/PersonalFinanceTracker.Api.csproj -c Release -o /app/publish
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app

@@ -6,6 +6,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "../../components/layout/AppShell";
 import { Card } from "../../components/common/Card";
 import { Modal } from "../../components/common/Modal";
+import { OverflowMenu } from "../../components/common/OverflowMenu";
+import { Pagination } from "../../components/common/Pagination";
 import { api } from "../../services/api/client";
 import { useToast } from "../../components/common/ToastProvider";
 import type { Category, CategoryType } from "../../types/models";
@@ -18,7 +20,9 @@ const categorySchema = z.object({
 });
 
 export function SettingsPage() {
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Category | null>(null);
+  const [page, setPage] = useState(1);
   const queryClient = useQueryClient();
   const { showToast } = useToast();
 
@@ -46,6 +50,10 @@ export function SettingsPage() {
           icon: "wallet",
         },
   });
+  const pageSize = 5;
+  const totalPages = Math.max(1, Math.ceil(categories.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pagedCategories = categories.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const saveMutation = useMutation({
     mutationFn: async (values: z.infer<typeof categorySchema>) => {
@@ -58,6 +66,7 @@ export function SettingsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["categories"] });
       showToast(editing ? "Category updated" : "Category created");
+      setIsCreateOpen(false);
       setEditing(null);
     },
   });
@@ -74,13 +83,24 @@ export function SettingsPage() {
 
   return (
     <AppShell title="Settings & Categories">
-      <div className="page-grid page-grid--two">
-        <Card title="Categories" subtitle="Manage custom income and expense categories." className="page-section page-section--list">
+      <Card
+        title="Categories"
+        subtitle="Manage custom income and expense categories."
+        className="page-section page-section--list"
+        actions={
+          <button type="button" className="primary-button" onClick={() => {
+            setEditing(null);
+            setIsCreateOpen(true);
+          }}>
+            New category
+          </button>
+        }
+      >
           <div className="list-stack">
-            {categories.map((category) => (
+            {pagedCategories.map((category) => (
               <div key={category.id} className="list-row list-row--aligned">
-                <div className="category-chip category-chip--details">
-                  <span className="category-chip__dot category-chip__dot--large" style={{ background: category.color }} />
+                <div className="category-chip category-chip--details category-chip--card">
+                  <span className="category-chip__swatch" style={{ background: `linear-gradient(135deg, ${category.color}, rgba(255,255,255,0.92))` }} />
                   <div className="category-chip__meta">
                     <strong>{category.name}</strong>
                     <span>
@@ -88,28 +108,23 @@ export function SettingsPage() {
                     </span>
                   </div>
                 </div>
-                <div className="inline-actions">
-                  <button type="button" className="ghost-button" onClick={() => setEditing(category)}>
-                    Edit
-                  </button>
-                  {!category.isArchived && (
-                    <button type="button" className="ghost-button ghost-button--danger" onClick={() => archiveMutation.mutate(category.id)}>
-                      Archive
-                    </button>
-                  )}
-                </div>
+                <OverflowMenu
+                  actions={[
+                    { label: "Edit", onClick: () => setEditing(category) },
+                    ...(!category.isArchived ? [{ label: "Archive", onClick: () => archiveMutation.mutate(category.id), tone: "danger" as const }] : []),
+                  ]}
+                />
               </div>
             ))}
-            {!categories.length && <div className="empty-state">Categories will appear here after you add or import them.</div>}
+            {!categories.length && <div className="empty-state">Categories will appear here after you use the button above to add them.</div>}
           </div>
-        </Card>
+          <Pagination page={currentPage} totalPages={totalPages} onPageChange={setPage} />
+      </Card>
 
-        <Card title="New category" subtitle="Keep your reporting taxonomy clean and consistent." className="page-section page-section--form">
-          <CategoryForm onSubmit={(values) => saveMutation.mutate(values)} form={form} isLoading={saveMutation.isPending} />
-        </Card>
-      </div>
-
-      <Modal open={Boolean(editing)} title={`Edit ${editing?.name ?? "category"}`} onClose={() => setEditing(null)}>
+      <Modal open={isCreateOpen || Boolean(editing)} title={editing ? `Edit ${editing.name}` : "New category"} onClose={() => {
+        setIsCreateOpen(false);
+        setEditing(null);
+      }}>
         <CategoryForm onSubmit={(values) => saveMutation.mutate(values)} form={form} isLoading={saveMutation.isPending} />
       </Modal>
     </AppShell>

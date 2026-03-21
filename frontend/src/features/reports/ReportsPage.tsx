@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { AppShell } from "../../components/layout/AppShell";
 import { Card } from "../../components/common/Card";
+import { Pagination } from "../../components/common/Pagination";
 import { api } from "../../services/api/client";
 import { useToast } from "../../components/common/ToastProvider";
 import { getAuthSession } from "../../store/auth-store";
@@ -21,6 +22,7 @@ export function ReportsPage() {
   const [filters, setFilters] = useState<{ startDate?: string; endDate?: string; accountId?: string; categoryId?: string; type?: TransactionType | "All" }>({
     type: "All",
   });
+  const [page, setPage] = useState(1);
   const { showToast } = useToast();
 
   const { data: accounts = [] } = useQuery({
@@ -55,6 +57,10 @@ export function ReportsPage() {
     queryKey: ["report-balance-trend", params],
     queryFn: async () => (await api.get<AccountBalanceTrendItem[]>("/reports/account-balance-trend", { params })).data,
   });
+  const pageSize = 4;
+  const totalPages = Math.max(1, Math.ceil(categorySpend.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pagedCategorySpend = categorySpend.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   async function exportCsv() {
     try {
@@ -177,7 +183,7 @@ export function ReportsPage() {
 
         <Card title="Top spend categories">
           <div className="list-stack">
-            {categorySpend.map((item) => (
+            {pagedCategorySpend.map((item) => (
               <div key={item.category} className="list-row">
                 <div>
                   <strong>{item.category}</strong>
@@ -188,6 +194,7 @@ export function ReportsPage() {
             ))}
             {!categorySpend.length && <div className="empty-state">Top spending categories will appear here after seeding or creating transactions.</div>}
           </div>
+          <Pagination page={currentPage} totalPages={totalPages} onPageChange={setPage} />
         </Card>
       </div>
     </AppShell>

@@ -1,5 +1,7 @@
 using System.Text;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.OpenApi.Models;
 using Microsoft.IdentityModel.Tokens;
 using PersonalFinanceTracker.Api.Middleware;
 using PersonalFinanceTracker.Infrastructure;
@@ -7,8 +9,42 @@ using PersonalFinanceTracker.Infrastructure.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "TrackMint API",
+        Version = "v1",
+        Description = "API documentation for the TrackMint personal finance tracker."
+    });
+
+    var jwtScheme = new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Description = "Enter a Bearer token. Example: Bearer {token}",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        Reference = new OpenApiReference
+        {
+            Type = ReferenceType.SecurityScheme,
+            Id = JwtBearerDefaults.AuthenticationScheme
+        }
+    };
+
+    options.AddSecurityDefinition(jwtScheme.Reference.Id, jwtScheme);
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        [jwtScheme] = Array.Empty<string>()
+    });
+});
 builder.Services.AddInfrastructure(builder.Configuration);
 
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
@@ -35,14 +71,35 @@ var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<stri
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("frontend", policy =>
-        policy.WithOrigins(allowedOrigins)
-            .AllowAnyHeader()
-            .AllowAnyMethod());
+    {
+        if (builder.Environment.IsDevelopment())
+        {
+            policy.SetIsOriginAllowed(origin =>
+                Uri.TryCreate(origin, UriKind.Absolute, out var uri) &&
+                (uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+                 uri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase)))
+                .AllowAnyHeader()
+                .AllowAnyMethod();
+        }
+        else
+        {
+            policy.WithOrigins(allowedOrigins)
+                .AllowAnyHeader()
+                .AllowAnyMethod();
+        }
+    });
 });
 
 var app = builder.Build();
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
+app.UseSwagger();
+app.UseSwaggerUI(options =>
+{
+    options.DocumentTitle = "TrackMint API Docs";
+    options.SwaggerEndpoint("/swagger/v1/swagger.json", "TrackMint API v1");
+    options.RoutePrefix = "swagger";
+});
 if (!app.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();
