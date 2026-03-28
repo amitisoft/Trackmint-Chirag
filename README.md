@@ -58,13 +58,6 @@ For protected endpoints, use Swagger's `Authorize` button and enter:
 Bearer YOUR_ACCESS_TOKEN
 ```
 
-## Configuration Notes
-
-- `backend/PersonalFinanceTracker.Api/appsettings.Development.json` is for your local machine only and is ignored by Git.
-- `frontend/.env.example` is committed as the frontend environment template.
-- `backend/PersonalFinanceTracker.Api/appsettings.Example.json` is committed as the backend environment template.
-- Do not commit real database passwords, JWT production keys, Azure secrets, or personal `.env` files.
-
 ## Documentation
 
 - [Backend README](./backend/README.md)
