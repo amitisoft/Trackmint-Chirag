@@ -8,23 +8,28 @@ namespace PersonalFinanceTracker.Infrastructure.Services;
 
 public sealed class DashboardService(
     ApplicationDbContext dbContext,
-    ICurrentUserService currentUserService) : IDashboardService
+    ICurrentUserService currentUserService,
+    IAccountAccessService accountAccessService) : IDashboardService
 {
     public async Task<DashboardSummaryResponse> GetSummaryAsync(CancellationToken cancellationToken)
     {
         var userId = currentUserService.GetUserId();
+        var accountIds = await accountAccessService.GetAccessibleAccountIdsAsync(userId, cancellationToken);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var monthStart = new DateOnly(today.Year, today.Month, 1);
         var monthEnd = monthStart.AddMonths(1).AddDays(-1);
 
         var accounts = await dbContext.Accounts
-            .Where(x => x.UserId == userId)
+            .Where(x => accountIds.Contains(x.Id))
             .ToListAsync(cancellationToken);
 
         var monthTransactions = await dbContext.Transactions
             .Include(x => x.Category)
             .Include(x => x.Account)
-            .Where(x => x.UserId == userId && x.TransactionDate >= monthStart && x.TransactionDate <= monthEnd)
+            .Where(x =>
+                (accountIds.Contains(x.AccountId) || (x.DestinationAccountId.HasValue && accountIds.Contains(x.DestinationAccountId.Value))) &&
+                x.TransactionDate >= monthStart &&
+                x.TransactionDate <= monthEnd)
             .ToListAsync(cancellationToken);
 
         var currentMonthIncome = monthTransactions.Where(x => x.Type == TransactionType.Income).Sum(x => x.Amount);
@@ -64,12 +69,10 @@ public sealed class DashboardService(
             .OrderByDescending(x => x.Value)
             .ToArray();
 
-        var trendPoints = await BuildTrendAsync(userId, today, cancellationToken);
-
         var recentTransactions = await dbContext.Transactions
             .Include(x => x.Category)
             .Include(x => x.Account)
-            .Where(x => x.UserId == userId)
+            .Where(x => accountIds.Contains(x.AccountId) || (x.DestinationAccountId.HasValue && accountIds.Contains(x.DestinationAccountId.Value)))
             .OrderByDescending(x => x.TransactionDate)
             .ThenByDescending(x => x.CreatedAt)
             .Take(6)
@@ -86,7 +89,11 @@ public sealed class DashboardService(
             .ToArrayAsync(cancellationToken);
 
         var upcomingRecurring = await dbContext.RecurringTransactions
-            .Where(x => x.UserId == userId && !x.IsPaused && x.NextRunDate >= today && x.NextRunDate <= today.AddDays(30))
+            .Where(x =>
+                !x.IsPaused &&
+                x.NextRunDate >= today &&
+                x.NextRunDate <= today.AddDays(30) &&
+                (accountIds.Contains(x.AccountId) || (x.DestinationAccountId.HasValue && accountIds.Contains(x.DestinationAccountId.Value))))
             .OrderBy(x => x.NextRunDate)
             .Take(6)
             .Select(x => new UpcomingRecurringItem
@@ -122,18 +129,20 @@ public sealed class DashboardService(
             NetBalance = accounts.Sum(x => x.CurrentBalance),
             BudgetProgressCards = budgetCards,
             SpendingByCategory = spendingByCategory,
-            IncomeExpenseTrend = trendPoints,
+            IncomeExpenseTrend = await BuildTrendAsync(accountIds, today, cancellationToken),
             RecentTransactions = recentTransactions,
             UpcomingRecurringPayments = upcomingRecurring,
             SavingsGoals = goals
         };
     }
 
-    private async Task<IReadOnlyCollection<TrendPoint>> BuildTrendAsync(Guid userId, DateOnly today, CancellationToken cancellationToken)
+    private async Task<IReadOnlyCollection<TrendPoint>> BuildTrendAsync(IReadOnlySet<Guid> accountIds, DateOnly today, CancellationToken cancellationToken)
     {
         var firstMonth = new DateOnly(today.Year, today.Month, 1).AddMonths(-5);
         var transactions = await dbContext.Transactions
-            .Where(x => x.UserId == userId && x.TransactionDate >= firstMonth)
+            .Where(x =>
+                x.TransactionDate >= firstMonth &&
+                (accountIds.Contains(x.AccountId) || (x.DestinationAccountId.HasValue && accountIds.Contains(x.DestinationAccountId.Value))))
             .ToListAsync(cancellationToken);
 
         return Enumerable.Range(0, 6)

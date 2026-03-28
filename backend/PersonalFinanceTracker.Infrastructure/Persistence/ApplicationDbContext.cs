@@ -16,6 +16,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<Goal> Goals => Set<Goal>();
     public DbSet<RecurringTransaction> RecurringTransactions => Set<RecurringTransaction>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<AccountMember> AccountMembers => Set<AccountMember>();
+    public DbSet<Rule> Rules => Set<Rule>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -36,6 +38,10 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.HasOne(x => x.User)
                 .WithMany(x => x.Accounts)
                 .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasMany(x => x.Members)
+                .WithOne(x => x.Account)
+                .HasForeignKey(x => x.AccountId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -137,6 +143,35 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property(x => x.Action).HasMaxLength(100);
             entity.Property(x => x.EntityType).HasMaxLength(100);
             entity.Property(x => x.MetadataJson).HasColumnType("jsonb");
+        });
+
+        modelBuilder.Entity<AccountMember>(entity =>
+        {
+            entity.Property(x => x.Role).HasConversion<string>();
+            entity.HasIndex(x => new { x.AccountId, x.UserId }).IsUnique();
+            entity.HasOne(x => x.User)
+                .WithMany(x => x.AccountMemberships)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Account)
+                .WithMany(x => x.Members)
+                .HasForeignKey(x => x.AccountId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Rule>(entity =>
+        {
+            entity.Property(x => x.Name).HasMaxLength(120);
+            entity.Property(x => x.ConditionField).HasConversion<string>();
+            entity.Property(x => x.ConditionOperator).HasConversion<string>();
+            entity.Property(x => x.ConditionValue).HasMaxLength(255);
+            entity.Property(x => x.ActionType).HasConversion<string>();
+            entity.Property(x => x.ActionValue).HasMaxLength(255);
+            entity.HasIndex(x => new { x.UserId, x.Priority });
+            entity.HasOne(x => x.User)
+                .WithMany(x => x.Rules)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         base.OnModelCreating(modelBuilder);

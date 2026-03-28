@@ -11,18 +11,34 @@ namespace PersonalFinanceTracker.Infrastructure.Services;
 public sealed class AccountService(
     ApplicationDbContext dbContext,
     ICurrentUserService currentUserService,
+    IAccountAccessService accountAccessService,
     IBalanceService balanceService,
     IAuditService auditService) : IAccountService
 {
     public async Task<IReadOnlyCollection<AccountResponse>> GetAllAsync(CancellationToken cancellationToken)
     {
         var userId = currentUserService.GetUserId();
-        var accounts = await dbContext.Accounts
+        var accessibleAccountIds = await accountAccessService.GetAccessibleAccountIdsAsync(userId, cancellationToken);
+        var memberships = await dbContext.AccountMembers
             .Where(x => x.UserId == userId)
+            .ToDictionaryAsync(x => x.AccountId, cancellationToken);
+
+        var accounts = await dbContext.Accounts
+            .Include(x => x.User)
+            .Where(x => accessibleAccountIds.Contains(x.Id))
             .OrderBy(x => x.Name)
             .ToListAsync(cancellationToken);
 
-        return accounts.Select(x => x.ToResponse()).ToArray();
+        return accounts.Select(x =>
+        {
+            var role = x.UserId == userId
+                ? AccountMemberRole.Owner
+                : memberships.TryGetValue(x.Id, out var membership)
+                    ? membership.Role
+                    : AccountMemberRole.Viewer;
+
+            return x.ToResponse(role, x.UserId != userId, x.User?.DisplayName);
+        }).ToArray();
     }
 
     public async Task<AccountResponse> CreateAsync(CreateAccountRequest request, CancellationToken cancellationToken)
@@ -51,7 +67,11 @@ public sealed class AccountService(
     public async Task<AccountResponse> UpdateAsync(Guid id, UpdateAccountRequest request, CancellationToken cancellationToken)
     {
         var userId = currentUserService.GetUserId();
-        var account = await dbContext.Accounts.SingleOrDefaultAsync(x => x.Id == id && x.UserId == userId, cancellationToken)
+        await accountAccessService.EnsureCanManageAccountAsync(userId, id, cancellationToken);
+
+        var account = await dbContext.Accounts
+            .Include(x => x.User)
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Account not found.");
 
         ValidationGuard.AgainstBlank(request.Name, "Account name");
@@ -66,7 +86,7 @@ public sealed class AccountService(
         await balanceService.RecalculateForUserAsync(userId, cancellationToken);
         await auditService.WriteAsync(userId, "account_updated", nameof(Account), account.Id, new { account.Name }, cancellationToken);
 
-        return account.ToResponse();
+        return account.ToResponse(AccountMemberRole.Owner, false, account.User?.DisplayName);
     }
 
     public async Task TransferAsync(TransferFundsRequest request, CancellationToken cancellationToken)
@@ -74,9 +94,12 @@ public sealed class AccountService(
         var userId = currentUserService.GetUserId();
         ValidationGuard.AgainstNonPositiveAmount(request.Amount);
 
-        var fromAccount = await dbContext.Accounts.SingleOrDefaultAsync(x => x.Id == request.FromAccountId && x.UserId == userId, cancellationToken)
+        await accountAccessService.EnsureCanEditTransactionsAsync(userId, request.FromAccountId, cancellationToken);
+        await accountAccessService.EnsureCanEditTransactionsAsync(userId, request.ToAccountId, cancellationToken);
+
+        var fromAccount = await dbContext.Accounts.SingleOrDefaultAsync(x => x.Id == request.FromAccountId, cancellationToken)
             ?? throw new NotFoundException("Source account not found.");
-        var toAccount = await dbContext.Accounts.SingleOrDefaultAsync(x => x.Id == request.ToAccountId && x.UserId == userId, cancellationToken)
+        var toAccount = await dbContext.Accounts.SingleOrDefaultAsync(x => x.Id == request.ToAccountId, cancellationToken)
             ?? throw new NotFoundException("Destination account not found.");
 
         if (fromAccount.Id == toAccount.Id)
@@ -97,7 +120,11 @@ public sealed class AccountService(
 
         await dbContext.Transactions.AddAsync(transaction, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
-        await balanceService.RecalculateForUserAsync(userId, cancellationToken);
+        await balanceService.RecalculateForUserAsync(fromAccount.UserId, cancellationToken);
+        if (toAccount.UserId != fromAccount.UserId)
+        {
+            await balanceService.RecalculateForUserAsync(toAccount.UserId, cancellationToken);
+        }
         await auditService.WriteAsync(
             userId,
             "account_transfer",

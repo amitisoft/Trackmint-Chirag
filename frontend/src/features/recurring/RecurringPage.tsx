@@ -8,6 +8,7 @@ import { Card } from "../../components/common/Card";
 import { Modal } from "../../components/common/Modal";
 import { OverflowMenu } from "../../components/common/OverflowMenu";
 import { Pagination } from "../../components/common/Pagination";
+import { FieldHelp } from "../../components/common/FieldHelp";
 import { api } from "../../services/api/client";
 import { useToast } from "../../components/common/ToastProvider";
 import type { Account, Category, RecurringFrequency, RecurringTransaction, TransactionType } from "../../types/models";
@@ -25,6 +26,34 @@ const recurringSchema = z.object({
   nextRunDate: z.string().optional(),
   autoCreateTransaction: z.boolean(),
   isPaused: z.boolean(),
+}).superRefine((values, context) => {
+  if (values.type === "Transfer") {
+    if (!values.destinationAccountId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Destination account is required for transfer",
+        path: ["destinationAccountId"],
+      });
+    }
+
+    if (values.destinationAccountId && values.destinationAccountId === values.accountId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Destination account must be different from source account",
+        path: ["destinationAccountId"],
+      });
+    }
+
+    return;
+  }
+
+  if (!values.categoryId) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Category is required for income and expense recurring transactions",
+      path: ["categoryId"],
+    });
+  }
 });
 
 type RecurringFormValues = z.infer<typeof recurringSchema>;
@@ -57,6 +86,7 @@ export function RecurringPage() {
 
   const form = useForm<RecurringFormValues>({
     resolver: zodResolver(recurringSchema),
+    mode: "onChange",
     values: useMemo(
       () => ({
         title: editing?.title ?? "",
@@ -102,7 +132,6 @@ export function RecurringPage() {
       setEditing(null);
     },
   });
-
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => api.delete(`/recurring/${id}`),
     onSuccess: () => {
@@ -172,14 +201,18 @@ function RecurringForm({
   onSubmit: (values: RecurringFormValues) => void;
   isLoading: boolean;
 }) {
+  const selectedType = form.watch("type");
+  const filteredCategories = categories.filter((category) => category.type === selectedType);
+  const canSubmit = form.formState.isValid && !isLoading && accounts.length > 0;
+
   return (
     <form className="form-grid" onSubmit={form.handleSubmit(onSubmit)}>
       <label>
-        Title
+        Title <span className="required-marker">*</span>
         <input type="text" {...form.register("title")} />
       </label>
       <label>
-        Type
+        Type <span className="required-marker">*</span>
         <select {...form.register("type")}>
           <option value="Expense">Expense</option>
           <option value="Income">Income</option>
@@ -187,11 +220,11 @@ function RecurringForm({
         </select>
       </label>
       <label>
-        Amount
+        Amount <span className="required-marker">*</span>
         <input type="number" step="0.01" {...form.register("amount", { valueAsNumber: true })} />
       </label>
       <label>
-        Source account
+        Source account <span className="required-marker">*</span>
         <select {...form.register("accountId")} disabled={!accounts.length}>
           {!accounts.length && <option value="">Create an account first</option>}
           {accounts.map((account) => (
@@ -202,9 +235,9 @@ function RecurringForm({
         </select>
         {!accounts.length && <small className="field-hint field-hint--warning">No source account yet. Create one in Accounts, then come back here.</small>}
       </label>
-      {form.watch("type") === "Transfer" ? (
+      {selectedType === "Transfer" ? (
         <label>
-          Destination account
+          Destination account <span className="required-marker">*</span>
           <select {...form.register("destinationAccountId")} disabled={!accounts.length}>
             <option value="">Select account</option>
             {accounts.map((account) => (
@@ -217,24 +250,25 @@ function RecurringForm({
         </label>
       ) : (
         <label>
-          Category
-          <select {...form.register("categoryId")} disabled={!categories.filter((category) => category.type === form.watch("type")).length}>
-            <option value="">{categories.filter((category) => category.type === form.watch("type")).length ? "Select category" : "Create a matching category first"}</option>
-            {categories
-              .filter((category) => category.type === form.watch("type"))
-              .map((category) => (
+          Category <span className="required-marker">*</span>
+          <select {...form.register("categoryId")} disabled={!filteredCategories.length}>
+            <option value="">{filteredCategories.length ? "Select category" : "Create a matching category first"}</option>
+            {filteredCategories.map((category) => (
                 <option key={category.id} value={category.id}>
                   {category.name}
                 </option>
               ))}
           </select>
-          {!categories.filter((category) => category.type === form.watch("type")).length && (
-            <small className="field-hint field-hint--warning">No {form.watch("type").toLowerCase()} category found. Create one in Settings first.</small>
+          {!filteredCategories.length && (
+            <small className="field-hint field-hint--warning">No {selectedType.toLowerCase()} category found. Create one in Settings first.</small>
           )}
         </label>
       )}
       <label>
-        Frequency
+        <span className="label-inline">
+          Frequency <span className="required-marker">*</span>
+          <FieldHelp text="How often this recurring transaction should be generated." />
+        </span>
         <select {...form.register("frequency")}>
           {(["Daily", "Weekly", "Monthly", "Yearly"] as RecurringFrequency[]).map((item) => (
             <option key={item} value={item}>
@@ -244,7 +278,7 @@ function RecurringForm({
         </select>
       </label>
       <label>
-        Start date
+        Start date <span className="required-marker">*</span>
         <input type="date" {...form.register("startDate")} />
       </label>
       <label>
@@ -252,18 +286,28 @@ function RecurringForm({
         <input type="date" {...form.register("endDate")} />
       </label>
       <label>
-        Next run date
+        <span className="label-inline">
+          Next run date
+          <FieldHelp text="Date when this recurring item will be processed next. If empty, start date is used." />
+        </span>
         <input type="date" {...form.register("nextRunDate")} />
       </label>
       <label className="checkbox-row">
         <input type="checkbox" {...form.register("autoCreateTransaction")} />
-        Auto-create transaction
+        <span className="label-inline">
+          Auto-create transaction
+          <FieldHelp text="If enabled, TrackMint automatically creates normal transactions from this schedule." />
+        </span>
       </label>
       <label className="checkbox-row">
         <input type="checkbox" {...form.register("isPaused")} />
-        Paused
+        <span className="label-inline">
+          Paused
+          <FieldHelp text="If enabled, this recurring schedule is temporarily stopped." />
+        </span>
       </label>
-      <button type="submit" className="primary-button" disabled={isLoading}>
+      {!form.formState.isValid && <small className="field-hint field-hint--warning">Complete required fields marked with * to continue.</small>}
+      <button type="submit" className="primary-button" disabled={!canSubmit}>
         {isLoading ? "Saving..." : "Save recurring item"}
       </button>
     </form>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, ArrowLeftRight, PiggyBank, Target, ChartColumnBig, Repeat2, WalletCards, Settings, LogOut, Menu, X } from "lucide-react";
+import { LayoutDashboard, ArrowLeftRight, PiggyBank, Target, ChartColumnBig, Repeat2, WalletCards, Settings, LogOut, Menu, X, Sparkles, SlidersHorizontal } from "lucide-react";
 import { useAuthStore } from "../../store/auth-store";
 
 const navigation = [
@@ -9,6 +9,8 @@ const navigation = [
   { to: "/budgets", label: "Budgets", icon: PiggyBank },
   { to: "/goals", label: "Goals", icon: Target },
   { to: "/reports", label: "Reports", icon: ChartColumnBig },
+  { to: "/insights", label: "Insights", icon: Sparkles },
+  { to: "/rules", label: "Rules", icon: SlidersHorizontal },
   { to: "/recurring", label: "Recurring", icon: Repeat2 },
   { to: "/accounts", label: "Accounts", icon: WalletCards },
   { to: "/settings", label: "Settings", icon: Settings },

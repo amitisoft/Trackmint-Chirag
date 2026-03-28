@@ -7,5 +7,7 @@ public interface IReportService
     Task<IReadOnlyCollection<CategorySpendReportItem>> GetCategorySpendAsync(ReportFilterRequest request, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<IncomeExpenseTrendItem>> GetIncomeExpenseTrendAsync(ReportFilterRequest request, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<AccountBalanceTrendItem>> GetAccountBalanceTrendAsync(ReportFilterRequest request, CancellationToken cancellationToken);
+    Task<ReportTrendsResponse> GetTrendsAsync(ReportFilterRequest request, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<NetWorthPoint>> GetNetWorthAsync(ReportFilterRequest request, CancellationToken cancellationToken);
     Task<ExportFileResponse> ExportTransactionsCsvAsync(ReportFilterRequest request, CancellationToken cancellationToken);
 }

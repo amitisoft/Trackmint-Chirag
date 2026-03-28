@@ -36,6 +36,7 @@ export function SettingsPage() {
 
   const form = useForm<z.infer<typeof categorySchema>>({
     resolver: zodResolver(categorySchema),
+    mode: "onChange",
     values: editing
       ? {
           name: editing.name,
@@ -140,14 +141,16 @@ function CategoryForm({
   onSubmit: (values: z.infer<typeof categorySchema>) => void;
   isLoading: boolean;
 }) {
+  const canSubmit = form.formState.isValid && !isLoading;
+
   return (
     <form className="form-grid" onSubmit={form.handleSubmit(onSubmit)}>
       <label>
-        Category name
+        Category name <span className="required-marker">*</span>
         <input type="text" {...form.register("name")} />
       </label>
       <label>
-        Type
+        Type <span className="required-marker">*</span>
         <select {...form.register("type")}>
           {(["Expense", "Income"] as CategoryType[]).map((item) => (
             <option key={item} value={item}>
@@ -157,14 +160,15 @@ function CategoryForm({
         </select>
       </label>
       <label>
-        Color
+        Color <span className="required-marker">*</span>
         <input type="text" {...form.register("color")} />
       </label>
       <label>
-        Icon label
+        Icon label <span className="required-marker">*</span>
         <input type="text" {...form.register("icon")} />
       </label>
-      <button type="submit" className="primary-button" disabled={isLoading}>
+      {!form.formState.isValid && <small className="field-hint field-hint--warning">Complete required fields marked with * to continue.</small>}
+      <button type="submit" className="primary-button" disabled={!canSubmit}>
         {isLoading ? "Saving..." : "Save category"}
       </button>
     </form>

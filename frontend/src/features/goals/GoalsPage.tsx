@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "../../components/layout/AppShell";
 import { Card } from "../../components/common/Card";
 import { Modal } from "../../components/common/Modal";
+import { FieldHelp } from "../../components/common/FieldHelp";
 import { api } from "../../services/api/client";
 import { useToast } from "../../components/common/ToastProvider";
 import type { Account, Goal, GoalStatus } from "../../types/models";
@@ -48,6 +49,7 @@ export function GoalsPage() {
 
   const form = useForm<GoalFormValues>({
     resolver: zodResolver(goalSchema),
+    mode: "onChange",
     values: useMemo(
       () => ({
         name: editing?.name ?? "",
@@ -64,6 +66,7 @@ export function GoalsPage() {
 
   const contributionForm = useForm<ContributionFormValues>({
     resolver: zodResolver(contributionSchema),
+    mode: "onChange",
     defaultValues: {
       amount: 0,
       sourceAccountId: "",
@@ -184,7 +187,7 @@ export function GoalsPage() {
       <Modal open={Boolean(activeGoal)} title={`${contributionMode === "contribute" ? "Contribute to" : "Withdraw from"} ${activeGoal?.name ?? ""}`} onClose={() => setActiveGoal(null)}>
         <form className="form-grid" onSubmit={contributionForm.handleSubmit((values) => contributionMutation.mutate(values))}>
           <label>
-            Amount
+            Amount <span className="required-marker">*</span>
             <input type="number" step="0.01" {...contributionForm.register("amount", { valueAsNumber: true })} />
           </label>
           <label>
@@ -198,7 +201,8 @@ export function GoalsPage() {
               ))}
             </select>
           </label>
-          <button type="submit" className="primary-button" disabled={contributionMutation.isPending}>
+          {!contributionForm.formState.isValid && <small className="field-hint field-hint--warning">Complete required fields marked with * to continue.</small>}
+          <button type="submit" className="primary-button" disabled={!contributionForm.formState.isValid || contributionMutation.isPending}>
             {contributionMutation.isPending ? "Saving..." : contributionMode === "contribute" ? "Add contribution" : "Withdraw"}
           </button>
         </form>
@@ -218,14 +222,16 @@ function GoalForm({
   onSubmit: (values: GoalFormValues) => void;
   isLoading: boolean;
 }) {
+  const canSubmit = form.formState.isValid && !isLoading;
+
   return (
     <form className="form-grid" onSubmit={form.handleSubmit(onSubmit)}>
       <label>
-        Goal name
+        Goal name <span className="required-marker">*</span>
         <input type="text" {...form.register("name")} />
       </label>
       <label>
-        Target amount
+        Target amount <span className="required-marker">*</span>
         <input type="number" step="0.01" {...form.register("targetAmount", { valueAsNumber: true })} />
       </label>
       <label>
@@ -233,7 +239,10 @@ function GoalForm({
         <input type="date" {...form.register("targetDate")} />
       </label>
       <label>
-        Linked account
+        <span className="label-inline">
+          Linked account
+          <FieldHelp text="Optional account used as funding source reference for this goal." />
+        </span>
         <select {...form.register("linkedAccountId")}>
           <option value="">No linked account</option>
           {accounts.map((account) => (
@@ -244,22 +253,26 @@ function GoalForm({
         </select>
       </label>
       <label>
-        Icon
+        Icon <span className="required-marker">*</span>
         <input type="text" {...form.register("icon")} />
       </label>
       <label>
-        Color
+        Color <span className="required-marker">*</span>
         <input type="text" {...form.register("color")} />
       </label>
       <label>
-        Status
+        <span className="label-inline">
+          Status <span className="required-marker">*</span>
+          <FieldHelp text="Active means in progress, Paused means on hold, Completed means goal achieved." />
+        </span>
         <select {...form.register("status")}>
           <option value="Active">Active</option>
           <option value="Completed">Completed</option>
           <option value="Paused">Paused</option>
         </select>
       </label>
-      <button type="submit" className="primary-button" disabled={isLoading}>
+      {!form.formState.isValid && <small className="field-hint field-hint--warning">Complete required fields marked with * to continue.</small>}
+      <button type="submit" className="primary-button" disabled={!canSubmit}>
         {isLoading ? "Saving..." : "Save goal"}
       </button>
     </form>

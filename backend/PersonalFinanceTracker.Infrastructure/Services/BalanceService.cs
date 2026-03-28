@@ -13,13 +13,15 @@ public sealed class BalanceService(ApplicationDbContext dbContext) : IBalanceSer
             .Where(x => x.UserId == userId)
             .ToDictionaryAsync(x => x.Id, cancellationToken);
 
+        var accountIds = accounts.Keys.ToHashSet();
+
         foreach (var account in accounts.Values)
         {
             account.CurrentBalance = account.OpeningBalance;
         }
 
         var transactions = await dbContext.Transactions
-            .Where(x => x.UserId == userId)
+            .Where(x => accountIds.Contains(x.AccountId) || (x.DestinationAccountId.HasValue && accountIds.Contains(x.DestinationAccountId.Value)))
             .OrderBy(x => x.TransactionDate)
             .ThenBy(x => x.CreatedAt)
             .ToListAsync(cancellationToken);

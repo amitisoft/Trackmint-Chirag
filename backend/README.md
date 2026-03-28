@@ -79,6 +79,9 @@ For GitHub, keep real local passwords only in `appsettings.Development.json`.
 - `GET/POST/PUT/DELETE /api/transactions`
 - `GET/POST/PUT /api/accounts`
 - `POST /api/accounts/transfer`
+- `GET /api/accounts/{id}/members`
+- `POST /api/accounts/{id}/invite`
+- `PUT /api/accounts/{id}/members/{userId}`
 - `GET/POST/PUT/DELETE /api/budgets`
 - `GET/POST/PUT /api/goals`
 - `POST /api/goals/{id}/contribute`
@@ -87,4 +90,11 @@ For GitHub, keep real local passwords only in `appsettings.Development.json`.
 - `GET /api/reports/category-spend`
 - `GET /api/reports/income-vs-expense`
 - `GET /api/reports/account-balance-trend`
+- `GET /api/reports/trends`
+- `GET /api/reports/net-worth`
 - `GET /api/reports/export/csv`
+- `GET /api/forecast/month`
+- `GET /api/forecast/daily`
+- `GET /api/insights/health-score`
+- `GET /api/insights`
+- `GET/POST/PUT/DELETE /api/rules`

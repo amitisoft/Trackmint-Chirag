@@ -16,6 +16,10 @@ export type CategoryType = "Income" | "Expense";
 export type TransactionType = "Income" | "Expense" | "Transfer";
 export type GoalStatus = "Active" | "Completed" | "Paused";
 export type RecurringFrequency = "Daily" | "Weekly" | "Monthly" | "Yearly";
+export type AccountMemberRole = "Owner" | "Editor" | "Viewer";
+export type RuleField = "Merchant" | "Amount" | "Category" | "TransactionType";
+export type RuleOperator = "Equals" | "Contains" | "GreaterThan" | "LessThan";
+export type RuleActionType = "SetCategory" | "AddTag" | "TriggerAlert";
 
 export type Account = {
   id: string;
@@ -25,6 +29,17 @@ export type Account = {
   currentBalance: number;
   institutionName?: string;
   updatedAt: string;
+  accessRole: AccountMemberRole;
+  isShared: boolean;
+  ownerDisplayName?: string;
+};
+
+export type AccountMember = {
+  userId: string;
+  email: string;
+  displayName: string;
+  role: AccountMemberRole;
+  isOwner: boolean;
 };
 
 export type Category = {
@@ -151,3 +166,75 @@ export type DashboardSummary = {
 export type CategorySpendItem = { category: string; amount: number; color: string };
 export type IncomeExpenseTrendItem = { label: string; income: number; expense: number };
 export type AccountBalanceTrendItem = { label: string; balance: number };
+
+export type CategoryTrendItem = {
+  label: string;
+  category: string;
+  amount: number;
+};
+
+export type SavingsRateTrendItem = {
+  label: string;
+  savingsRatePercent: number;
+};
+
+export type ReportTrendsResponse = {
+  incomeExpense: IncomeExpenseTrendItem[];
+  savingsRate: SavingsRateTrendItem[];
+  categoryTrends: CategoryTrendItem[];
+};
+
+export type NetWorthPoint = {
+  label: string;
+  netWorth: number;
+};
+
+export type ForecastUpcomingItem = {
+  date: string;
+  title: string;
+  amount: number;
+  type: string;
+};
+
+export type ForecastMonthResponse = {
+  currentBalance: number;
+  projectedEndOfMonthBalance: number;
+  safeToSpend: number;
+  upcomingKnownTransactions: ForecastUpcomingItem[];
+  riskWarnings: string[];
+};
+
+export type ForecastDailyPoint = {
+  date: string;
+  projectedBalance: number;
+};
+
+export type HealthFactorBreakdown = {
+  name: string;
+  score: number;
+  weight: number;
+};
+
+export type FinancialHealthScoreResponse = {
+  score: number;
+  factors: HealthFactorBreakdown[];
+  suggestions: string[];
+};
+
+export type InsightCard = {
+  title: string;
+  message: string;
+  tone: "positive" | "warning" | "neutral" | string;
+};
+
+export type Rule = {
+  id: string;
+  name: string;
+  conditionField: RuleField;
+  conditionOperator: RuleOperator;
+  conditionValue: string;
+  actionType: RuleActionType;
+  actionValue: string;
+  isActive: boolean;
+  priority: number;
+};

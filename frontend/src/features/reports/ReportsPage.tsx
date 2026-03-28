@@ -7,7 +7,15 @@ import { Pagination } from "../../components/common/Pagination";
 import { api } from "../../services/api/client";
 import { useToast } from "../../components/common/ToastProvider";
 import { getAuthSession } from "../../store/auth-store";
-import type { Account, AccountBalanceTrendItem, Category, CategorySpendItem, IncomeExpenseTrendItem, TransactionType } from "../../types/models";
+import type {
+  Account,
+  Category,
+  CategorySpendItem,
+  InsightCard,
+  NetWorthPoint,
+  ReportTrendsResponse,
+  TransactionType,
+} from "../../types/models";
 
 function currency(value: number) {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value);
@@ -48,16 +56,21 @@ export function ReportsPage() {
     queryFn: async () => (await api.get<CategorySpendItem[]>("/reports/category-spend", { params })).data,
   });
 
-  const { data: trend = [] } = useQuery({
-    queryKey: ["report-income-expense", params],
-    queryFn: async () => (await api.get<IncomeExpenseTrendItem[]>("/reports/income-vs-expense", { params })).data,
+  const { data: trends } = useQuery({
+    queryKey: ["report-trends", params],
+    queryFn: async () => (await api.get<ReportTrendsResponse>("/reports/trends", { params })).data,
   });
 
-  const { data: balanceTrend = [] } = useQuery({
-    queryKey: ["report-balance-trend", params],
-    queryFn: async () => (await api.get<AccountBalanceTrendItem[]>("/reports/account-balance-trend", { params })).data,
+  const { data: netWorth = [] } = useQuery({
+    queryKey: ["report-net-worth", params],
+    queryFn: async () => (await api.get<NetWorthPoint[]>("/reports/net-worth", { params })).data,
   });
-  const pageSize = 4;
+
+  const { data: insightCards = [] } = useQuery({
+    queryKey: ["report-insight-cards"],
+    queryFn: async () => (await api.get<InsightCard[]>("/insights")).data,
+  });
+  const pageSize = 3;
   const totalPages = Math.max(1, Math.ceil(categorySpend.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const pagedCategorySpend = categorySpend.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -146,9 +159,9 @@ export function ReportsPage() {
 
         <Card title="Income vs Expense">
           <div className="chart-box">
-            {trend.length ? (
+            {(trends?.incomeExpense?.length ?? 0) > 0 ? (
               <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={trend}>
+                <LineChart data={trends?.incomeExpense ?? []}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="label" />
                   <YAxis />
@@ -165,14 +178,14 @@ export function ReportsPage() {
 
         <Card title="Account Balance Trend">
           <div className="chart-box">
-            {balanceTrend.length ? (
+            {netWorth.length ? (
               <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={balanceTrend}>
+                <LineChart data={netWorth}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="label" />
                   <YAxis />
                   <Tooltip formatter={(value) => tooltipCurrency(value)} />
-                  <Line type="monotone" dataKey="balance" stroke="#1d4ed8" strokeWidth={3} />
+                  <Line type="monotone" dataKey="netWorth" stroke="#1d4ed8" strokeWidth={3} />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
@@ -195,6 +208,38 @@ export function ReportsPage() {
             {!categorySpend.length && <div className="empty-state">Top spending categories will appear here after seeding or creating transactions.</div>}
           </div>
           <Pagination page={currentPage} totalPages={totalPages} onPageChange={setPage} />
+        </Card>
+
+        <Card title="Savings rate trend">
+          <div className="chart-box">
+            {(trends?.savingsRate?.length ?? 0) > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={trends?.savingsRate ?? []}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="label" />
+                  <YAxis />
+                  <Tooltip formatter={(value) => `${Number(value ?? 0).toFixed(1)}%`} />
+                  <Line type="monotone" dataKey="savingsRatePercent" stroke="#0f766e" strokeWidth={3} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="empty-state">Savings rate trend appears once income and expense data exists.</div>
+            )}
+          </div>
+        </Card>
+
+        <Card title="Insight highlights">
+          <div className="list-stack">
+            {insightCards.map((item) => (
+              <div key={`${item.title}-${item.message}`} className="list-row list-row--aligned">
+                <div>
+                  <strong>{item.title}</strong>
+                  <span>{item.message}</span>
+                </div>
+              </div>
+            ))}
+            {!insightCards.length && <div className="empty-state empty-state--table">No insights available for selected data.</div>}
+          </div>
         </Card>
       </div>
     </AppShell>

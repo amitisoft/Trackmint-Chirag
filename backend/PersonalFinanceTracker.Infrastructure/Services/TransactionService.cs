@@ -12,18 +12,21 @@ namespace PersonalFinanceTracker.Infrastructure.Services;
 public sealed class TransactionService(
     ApplicationDbContext dbContext,
     ICurrentUserService currentUserService,
+    IAccountAccessService accountAccessService,
     IBalanceService balanceService,
+    IRuleService ruleService,
     IAuditService auditService) : ITransactionService
 {
     public async Task<PagedResult<TransactionResponse>> GetAllAsync(TransactionQueryRequest request, CancellationToken cancellationToken)
     {
         var userId = currentUserService.GetUserId();
+        var accessibleAccountIds = await accountAccessService.GetAccessibleAccountIdsAsync(userId, cancellationToken);
         var query = ApplyFilters(dbContext.Transactions
             .AsNoTracking()
             .Include(x => x.Account)
             .Include(x => x.DestinationAccount)
             .Include(x => x.Category)
-            .Where(x => x.UserId == userId), request);
+            .Where(x => accessibleAccountIds.Contains(x.AccountId) || (x.DestinationAccountId.HasValue && accessibleAccountIds.Contains(x.DestinationAccountId.Value))), request);
 
         var totalCount = await query.CountAsync(cancellationToken);
         var page = Math.Max(request.Page, 1);
@@ -48,8 +51,9 @@ public sealed class TransactionService(
     public async Task<TransactionResponse> GetByIdAsync(Guid id, CancellationToken cancellationToken)
     {
         var userId = currentUserService.GetUserId();
-        var transaction = await QueryTransactions(userId)
-            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
+        var accessibleAccountIds = await accountAccessService.GetAccessibleAccountIdsAsync(userId, cancellationToken);
+        var transaction = await QueryTransactions()
+            .SingleOrDefaultAsync(x => x.Id == id && (accessibleAccountIds.Contains(x.AccountId) || (x.DestinationAccountId.HasValue && accessibleAccountIds.Contains(x.DestinationAccountId.Value))), cancellationToken)
             ?? throw new NotFoundException("Transaction not found.");
 
         return transaction.ToResponse();
@@ -58,9 +62,8 @@ public sealed class TransactionService(
     public async Task<TransactionResponse> CreateAsync(CreateTransactionRequest request, CancellationToken cancellationToken)
     {
         var userId = currentUserService.GetUserId();
-        await ValidateOwnershipAsync(userId, request.AccountId, request.DestinationAccountId, request.CategoryId, request.Type, cancellationToken);
+        await EnsureAccountOwnershipAsync(userId, request.AccountId, request.DestinationAccountId, cancellationToken);
         ValidationGuard.AgainstNonPositiveAmount(request.Amount);
-        ValidationGuard.AgainstInvalidTransaction(request.Type, request.CategoryId, request.DestinationAccountId, request.AccountId);
 
         var transaction = new Transaction
         {
@@ -78,10 +81,14 @@ public sealed class TransactionService(
             RecurringTransactionId = request.RecurringTransactionId
         };
 
+        await ruleService.ApplyRulesAsync(transaction, cancellationToken);
+        ValidationGuard.AgainstInvalidTransaction(transaction.Type, transaction.CategoryId, transaction.DestinationAccountId, transaction.AccountId);
+        await EnsureCategoryOwnershipAsync(userId, transaction.AccountId, transaction.CategoryId, transaction.Type, cancellationToken);
+
         await using var dbTransaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         await dbContext.Transactions.AddAsync(transaction, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
-        await balanceService.RecalculateForUserAsync(userId, cancellationToken);
+        await RecalculateForImpactedOwnersAsync(transaction.AccountId, transaction.DestinationAccountId, cancellationToken);
         await dbTransaction.CommitAsync(cancellationToken);
 
         await auditService.WriteAsync(userId, "transaction_created", nameof(Transaction), transaction.Id, new { transaction.Type, transaction.Amount }, cancellationToken);
@@ -92,12 +99,16 @@ public sealed class TransactionService(
     public async Task<TransactionResponse> UpdateAsync(Guid id, UpdateTransactionRequest request, CancellationToken cancellationToken)
     {
         var userId = currentUserService.GetUserId();
-        var transaction = await dbContext.Transactions.SingleOrDefaultAsync(x => x.Id == id && x.UserId == userId, cancellationToken)
+        var transaction = await dbContext.Transactions
+            .Include(x => x.Account)
+            .Include(x => x.DestinationAccount)
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Transaction not found.");
 
-        await ValidateOwnershipAsync(userId, request.AccountId, request.DestinationAccountId, request.CategoryId, request.Type, cancellationToken);
+        await accountAccessService.EnsureCanEditTransactionsAsync(userId, transaction.AccountId, cancellationToken);
+
+        await EnsureAccountOwnershipAsync(userId, request.AccountId, request.DestinationAccountId, cancellationToken);
         ValidationGuard.AgainstNonPositiveAmount(request.Amount);
-        ValidationGuard.AgainstInvalidTransaction(request.Type, request.CategoryId, request.DestinationAccountId, request.AccountId);
 
         transaction.AccountId = request.AccountId;
         transaction.DestinationAccountId = request.Type == TransactionType.Transfer ? request.DestinationAccountId : null;
@@ -109,10 +120,13 @@ public sealed class TransactionService(
         transaction.Merchant = request.Merchant?.Trim();
         transaction.PaymentMethod = request.PaymentMethod?.Trim();
         transaction.Tags = request.Tags.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct().ToArray();
+        await ruleService.ApplyRulesAsync(transaction, cancellationToken);
+        ValidationGuard.AgainstInvalidTransaction(transaction.Type, transaction.CategoryId, transaction.DestinationAccountId, transaction.AccountId);
+        await EnsureCategoryOwnershipAsync(userId, transaction.AccountId, transaction.CategoryId, transaction.Type, cancellationToken);
 
         await using var dbTransaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
-        await balanceService.RecalculateForUserAsync(userId, cancellationToken);
+        await RecalculateForImpactedOwnersAsync(transaction.AccountId, transaction.DestinationAccountId, cancellationToken);
         await dbTransaction.CommitAsync(cancellationToken);
 
         await auditService.WriteAsync(userId, "transaction_updated", nameof(Transaction), transaction.Id, new { transaction.Type, transaction.Amount }, cancellationToken);
@@ -123,13 +137,14 @@ public sealed class TransactionService(
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
         var userId = currentUserService.GetUserId();
-        var transaction = await dbContext.Transactions.SingleOrDefaultAsync(x => x.Id == id && x.UserId == userId, cancellationToken)
+        var transaction = await dbContext.Transactions.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Transaction not found.");
+        await accountAccessService.EnsureCanEditTransactionsAsync(userId, transaction.AccountId, cancellationToken);
 
         await using var dbTransaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         dbContext.Transactions.Remove(transaction);
         await dbContext.SaveChangesAsync(cancellationToken);
-        await balanceService.RecalculateForUserAsync(userId, cancellationToken);
+        await RecalculateForImpactedOwnersAsync(transaction.AccountId, transaction.DestinationAccountId, cancellationToken);
         await dbTransaction.CommitAsync(cancellationToken);
 
         await auditService.WriteAsync(userId, "transaction_deleted", nameof(Transaction), transaction.Id, new { transaction.Type, transaction.Amount }, cancellationToken);
@@ -183,44 +198,64 @@ public sealed class TransactionService(
         return query;
     }
 
-    private IQueryable<Transaction> QueryTransactions(Guid userId) =>
+    private IQueryable<Transaction> QueryTransactions() =>
         dbContext.Transactions
             .AsNoTracking()
             .Include(x => x.Account)
             .Include(x => x.DestinationAccount)
-            .Include(x => x.Category)
-            .Where(x => x.UserId == userId);
+            .Include(x => x.Category);
 
-    private async Task ValidateOwnershipAsync(
+    private async Task EnsureAccountOwnershipAsync(
         Guid userId,
         Guid accountId,
         Guid? destinationAccountId,
+        CancellationToken cancellationToken)
+    {
+        await accountAccessService.EnsureCanEditTransactionsAsync(userId, accountId, cancellationToken);
+
+        if (destinationAccountId.HasValue)
+        {
+            await accountAccessService.EnsureCanEditTransactionsAsync(userId, destinationAccountId.Value, cancellationToken);
+        }
+    }
+
+    private async Task EnsureCategoryOwnershipAsync(
+        Guid userId,
+        Guid accountId,
         Guid? categoryId,
         TransactionType type,
         CancellationToken cancellationToken)
     {
-        var accountExists = await dbContext.Accounts.AnyAsync(x => x.Id == accountId && x.UserId == userId, cancellationToken);
-        if (!accountExists)
+        if (type == TransactionType.Transfer || !categoryId.HasValue)
         {
-            throw new ValidationException("Selected account does not exist.");
+            return;
         }
 
-        if (destinationAccountId.HasValue)
-        {
-            var destinationExists = await dbContext.Accounts.AnyAsync(x => x.Id == destinationAccountId.Value && x.UserId == userId, cancellationToken);
-            if (!destinationExists)
-            {
-                throw new ValidationException("Selected destination account does not exist.");
-            }
-        }
+        var accountOwnerId = await dbContext.Accounts
+            .Where(x => x.Id == accountId)
+            .Select(x => x.UserId)
+            .SingleOrDefaultAsync(cancellationToken);
 
-        if (type != TransactionType.Transfer && categoryId.HasValue)
+        var categoryExists = await dbContext.Categories.AnyAsync(
+            x => x.Id == categoryId.Value && (x.UserId == userId || x.UserId == accountOwnerId),
+            cancellationToken);
+        if (!categoryExists)
         {
-            var categoryExists = await dbContext.Categories.AnyAsync(x => x.Id == categoryId.Value && x.UserId == userId, cancellationToken);
-            if (!categoryExists)
-            {
-                throw new ValidationException("Selected category does not exist.");
-            }
+            throw new ValidationException("Selected category does not exist.");
+        }
+    }
+
+    private async Task RecalculateForImpactedOwnersAsync(Guid accountId, Guid? destinationAccountId, CancellationToken cancellationToken)
+    {
+        var impactedOwnerIds = await dbContext.Accounts
+            .Where(x => x.Id == accountId || (destinationAccountId.HasValue && x.Id == destinationAccountId.Value))
+            .Select(x => x.UserId)
+            .Distinct()
+            .ToArrayAsync(cancellationToken);
+
+        foreach (var ownerId in impactedOwnerIds)
+        {
+            await balanceService.RecalculateForUserAsync(ownerId, cancellationToken);
         }
     }
 }

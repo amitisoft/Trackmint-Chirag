@@ -30,6 +30,10 @@ TrackMint is a full-stack personal finance tracker built with:
 - savings goals with contribution and withdrawal flows
 - recurring transactions with a background worker
 - dashboard analytics and reporting charts
+- cash-flow forecasting (month + daily projection)
+- financial health score and insight cards
+- automation rules engine for transaction processing
+- shared accounts with owner/editor/viewer roles
 - CSV export
 - responsive UI for desktop and mobile
 

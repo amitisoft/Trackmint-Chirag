@@ -12,12 +12,16 @@ namespace PersonalFinanceTracker.Infrastructure.Services;
 
 public sealed class ReportService(
     ApplicationDbContext dbContext,
-    ICurrentUserService currentUserService) : IReportService
+    ICurrentUserService currentUserService,
+    IAccountAccessService accountAccessService) : IReportService
 {
     public async Task<IReadOnlyCollection<CategorySpendReportItem>> GetCategorySpendAsync(ReportFilterRequest request, CancellationToken cancellationToken)
     {
         var userId = currentUserService.GetUserId();
-        var query = ApplyFilters(dbContext.Transactions.Include(x => x.Category).Where(x => x.UserId == userId), request)
+        var accountIds = await accountAccessService.GetAccessibleAccountIdsAsync(userId, cancellationToken);
+        var query = ApplyFilters(dbContext.Transactions
+                .Include(x => x.Category)
+                .Where(x => accountIds.Contains(x.AccountId) || (x.DestinationAccountId.HasValue && accountIds.Contains(x.DestinationAccountId.Value))), request)
             .Where(x => x.Type == TransactionType.Expense && x.Category != null);
 
         return await query
@@ -35,7 +39,10 @@ public sealed class ReportService(
     public async Task<IReadOnlyCollection<IncomeExpenseTrendItem>> GetIncomeExpenseTrendAsync(ReportFilterRequest request, CancellationToken cancellationToken)
     {
         var userId = currentUserService.GetUserId();
-        var transactions = await ApplyFilters(dbContext.Transactions.Where(x => x.UserId == userId), request)
+        var accountIds = await accountAccessService.GetAccessibleAccountIdsAsync(userId, cancellationToken);
+        var transactions = await ApplyFilters(
+                dbContext.Transactions.Where(x => accountIds.Contains(x.AccountId) || (x.DestinationAccountId.HasValue && accountIds.Contains(x.DestinationAccountId.Value))),
+                request)
             .ToListAsync(cancellationToken);
 
         return transactions
@@ -53,19 +60,92 @@ public sealed class ReportService(
 
     public async Task<IReadOnlyCollection<AccountBalanceTrendItem>> GetAccountBalanceTrendAsync(ReportFilterRequest request, CancellationToken cancellationToken)
     {
+        var points = await GetNetWorthAsync(request, cancellationToken);
+        return points.Select(x => new AccountBalanceTrendItem
+        {
+            Label = x.Label,
+            Balance = x.NetWorth
+        }).ToArray();
+    }
+
+    public async Task<ReportTrendsResponse> GetTrendsAsync(ReportFilterRequest request, CancellationToken cancellationToken)
+    {
         var userId = currentUserService.GetUserId();
+        var accountIds = await accountAccessService.GetAccessibleAccountIdsAsync(userId, cancellationToken);
+        var startDate = request.StartDate ?? DateOnly.FromDateTime(DateTime.UtcNow).AddMonths(-5);
+        var endDate = request.EndDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
+
+        var transactions = await ApplyFilters(
+                dbContext.Transactions
+                    .Include(x => x.Category)
+                    .Where(x => accountIds.Contains(x.AccountId) || (x.DestinationAccountId.HasValue && accountIds.Contains(x.DestinationAccountId.Value))),
+                request)
+            .Where(x => x.TransactionDate >= startDate && x.TransactionDate <= endDate)
+            .ToListAsync(cancellationToken);
+
+        var incomeExpense = transactions
+            .GroupBy(x => new { x.TransactionDate.Year, x.TransactionDate.Month })
+            .OrderBy(x => x.Key.Year)
+            .ThenBy(x => x.Key.Month)
+            .Select(group => new IncomeExpenseTrendItem
+            {
+                Label = new DateOnly(group.Key.Year, group.Key.Month, 1).ToString("MMM yy"),
+                Income = group.Where(x => x.Type == TransactionType.Income).Sum(x => x.Amount),
+                Expense = group.Where(x => x.Type == TransactionType.Expense).Sum(x => x.Amount)
+            })
+            .ToArray();
+
+        var savingsRate = incomeExpense.Select(x =>
+        {
+            var rate = x.Income <= 0 ? 0 : ((x.Income - x.Expense) / x.Income) * 100;
+            return new SavingsRateTrendItem
+            {
+                Label = x.Label,
+                SavingsRatePercent = Math.Round(rate, 2)
+            };
+        }).ToArray();
+
+        var categoryTrends = transactions
+            .Where(x => x.Type == TransactionType.Expense && x.Category != null)
+            .GroupBy(x => new { x.TransactionDate.Year, x.TransactionDate.Month, Category = x.Category!.Name })
+            .Select(group => new CategoryTrendItem
+            {
+                Label = new DateOnly(group.Key.Year, group.Key.Month, 1).ToString("MMM yy"),
+                Category = group.Key.Category,
+                Amount = group.Sum(x => x.Amount)
+            })
+            .OrderBy(x => x.Label)
+            .ThenByDescending(x => x.Amount)
+            .ToArray();
+
+        return new ReportTrendsResponse
+        {
+            IncomeExpense = incomeExpense,
+            SavingsRate = savingsRate,
+            CategoryTrends = categoryTrends
+        };
+    }
+
+    public async Task<IReadOnlyCollection<NetWorthPoint>> GetNetWorthAsync(ReportFilterRequest request, CancellationToken cancellationToken)
+    {
+        var userId = currentUserService.GetUserId();
+        var accountIds = await accountAccessService.GetAccessibleAccountIdsAsync(userId, cancellationToken);
+
         var accounts = await dbContext.Accounts
-            .Where(x => x.UserId == userId && (!request.AccountId.HasValue || x.Id == request.AccountId.Value))
+            .Where(x => accountIds.Contains(x.Id) && (!request.AccountId.HasValue || x.Id == request.AccountId.Value))
             .ToListAsync(cancellationToken);
 
         var startDate = request.StartDate ?? DateOnly.FromDateTime(DateTime.UtcNow).AddMonths(-5);
         var endDate = request.EndDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
 
-        var transactions = await ApplyFilters(dbContext.Transactions.Where(x => x.UserId == userId), request)
+        var accountIdSet = accounts.Select(x => x.Id).ToHashSet();
+        var transactions = await ApplyFilters(
+                dbContext.Transactions.Where(x => accountIdSet.Contains(x.AccountId) || (x.DestinationAccountId.HasValue && accountIdSet.Contains(x.DestinationAccountId.Value))),
+                request)
             .ToListAsync(cancellationToken);
 
         var months = BuildMonthSeries(startDate, endDate);
-        var results = new List<AccountBalanceTrendItem>();
+        var results = new List<NetWorthPoint>();
 
         foreach (var month in months)
         {
@@ -85,10 +165,10 @@ public sealed class ReportService(
                 };
             }
 
-            results.Add(new AccountBalanceTrendItem
+            results.Add(new NetWorthPoint
             {
                 Label = month.ToString("MMM yy"),
-                Balance = balance
+                NetWorth = balance
             });
         }
 
@@ -98,11 +178,12 @@ public sealed class ReportService(
     public async Task<ExportFileResponse> ExportTransactionsCsvAsync(ReportFilterRequest request, CancellationToken cancellationToken)
     {
         var userId = currentUserService.GetUserId();
+        var accountIds = await accountAccessService.GetAccessibleAccountIdsAsync(userId, cancellationToken);
         var transactions = await ApplyFilters(dbContext.Transactions
                 .Include(x => x.Account)
                 .Include(x => x.DestinationAccount)
                 .Include(x => x.Category)
-                .Where(x => x.UserId == userId), request)
+                .Where(x => accountIds.Contains(x.AccountId) || (x.DestinationAccountId.HasValue && accountIds.Contains(x.DestinationAccountId.Value))), request)
             .OrderByDescending(x => x.TransactionDate)
             .ToListAsync(cancellationToken);
 

@@ -27,6 +27,8 @@ public static class DependencyInjection
         services.AddScoped<IPasswordHasher, Pbkdf2PasswordHasher>();
         services.AddScoped<ITokenService, JwtTokenService>();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IAccountAccessService, AccountAccessService>();
+        services.AddScoped<IAccountMembershipService, AccountMembershipService>();
         services.AddScoped<IAccountService, AccountService>();
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<ITransactionService, TransactionService>();
@@ -35,6 +37,9 @@ public static class DependencyInjection
         services.AddScoped<IRecurringTransactionService, RecurringTransactionService>();
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<IReportService, ReportService>();
+        services.AddScoped<IForecastService, ForecastService>();
+        services.AddScoped<IInsightsService, InsightsService>();
+        services.AddScoped<IRuleService, RuleService>();
         services.AddScoped<IBalanceService, BalanceService>();
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IDefaultCategorySeeder, DefaultCategorySeeder>();
@@ -49,5 +54,62 @@ public static class DependencyInjection
         await using var scope = serviceProvider.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         await dbContext.Database.EnsureCreatedAsync();
+        await EnsureV2SchemaAsync(dbContext);
+    }
+
+    private static async Task EnsureV2SchemaAsync(ApplicationDbContext dbContext)
+    {
+        if (!dbContext.Database.IsNpgsql())
+        {
+            return;
+        }
+
+        await dbContext.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "AccountMembers" (
+                "Id" uuid NOT NULL,
+                "CreatedAt" timestamp with time zone NOT NULL,
+                "UpdatedAt" timestamp with time zone NOT NULL,
+                "AccountId" uuid NOT NULL,
+                "UserId" uuid NOT NULL,
+                "Role" text NOT NULL,
+                CONSTRAINT "PK_AccountMembers" PRIMARY KEY ("Id"),
+                CONSTRAINT "FK_AccountMembers_Accounts_AccountId" FOREIGN KEY ("AccountId") REFERENCES "Accounts" ("Id") ON DELETE CASCADE,
+                CONSTRAINT "FK_AccountMembers_Users_UserId" FOREIGN KEY ("UserId") REFERENCES "Users" ("Id") ON DELETE CASCADE
+            );
+            """);
+
+        await dbContext.Database.ExecuteSqlRawAsync("""
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_AccountMembers_AccountId_UserId"
+            ON "AccountMembers" ("AccountId", "UserId");
+            """);
+
+        await dbContext.Database.ExecuteSqlRawAsync("""
+            CREATE INDEX IF NOT EXISTS "IX_AccountMembers_UserId"
+            ON "AccountMembers" ("UserId");
+            """);
+
+        await dbContext.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "Rules" (
+                "Id" uuid NOT NULL,
+                "CreatedAt" timestamp with time zone NOT NULL,
+                "UpdatedAt" timestamp with time zone NOT NULL,
+                "UserId" uuid NOT NULL,
+                "Name" character varying(120) NOT NULL,
+                "ConditionField" text NOT NULL,
+                "ConditionOperator" text NOT NULL,
+                "ConditionValue" character varying(255) NOT NULL,
+                "ActionType" text NOT NULL,
+                "ActionValue" character varying(255) NOT NULL,
+                "IsActive" boolean NOT NULL,
+                "Priority" integer NOT NULL,
+                CONSTRAINT "PK_Rules" PRIMARY KEY ("Id"),
+                CONSTRAINT "FK_Rules_Users_UserId" FOREIGN KEY ("UserId") REFERENCES "Users" ("Id") ON DELETE CASCADE
+            );
+            """);
+
+        await dbContext.Database.ExecuteSqlRawAsync("""
+            CREATE INDEX IF NOT EXISTS "IX_Rules_UserId_Priority"
+            ON "Rules" ("UserId", "Priority");
+            """);
     }
 }

@@ -15,4 +15,5 @@ public sealed class Account : BaseEntity
 
     public ICollection<Transaction> SourceTransactions { get; set; } = new List<Transaction>();
     public ICollection<Transaction> DestinationTransactions { get; set; } = new List<Transaction>();
+    public ICollection<AccountMember> Members { get; set; } = new List<AccountMember>();
 }

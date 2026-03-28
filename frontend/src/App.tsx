@@ -9,6 +9,8 @@ import { ReportsPage } from "./features/reports/ReportsPage";
 import { RecurringPage } from "./features/recurring/RecurringPage";
 import { AccountsPage } from "./features/accounts/AccountsPage";
 import { SettingsPage } from "./features/settings/SettingsPage";
+import { InsightsPage } from "./features/insights/InsightsPage";
+import { RulesPage } from "./features/rules/RulesPage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const session = useAuthStore((state) => state.session);
@@ -117,6 +119,22 @@ export default function App() {
         element={
           <ProtectedRoute>
             <SettingsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/insights"
+        element={
+          <ProtectedRoute>
+            <InsightsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/rules"
+        element={
+          <ProtectedRoute>
+            <RulesPage />
           </ProtectedRoute>
         }
       />

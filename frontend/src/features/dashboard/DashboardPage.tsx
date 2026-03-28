@@ -3,7 +3,7 @@ import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, Res
 import { AppShell } from "../../components/layout/AppShell";
 import { Card } from "../../components/common/Card";
 import { api } from "../../services/api/client";
-import type { DashboardSummary } from "../../types/models";
+import type { DashboardSummary, FinancialHealthScoreResponse, ForecastMonthResponse } from "../../types/models";
 
 function currency(value: number) {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value);
@@ -40,14 +40,34 @@ export function DashboardPage() {
     },
   });
 
+  const { data: healthScore } = useQuery({
+    queryKey: ["dashboard-health-score"],
+    queryFn: async () => (await api.get<FinancialHealthScoreResponse>("/insights/health-score")).data,
+  });
+
+  const { data: forecastMonth } = useQuery({
+    queryKey: ["dashboard-forecast-month"],
+    queryFn: async () => (await api.get<ForecastMonthResponse>("/forecast/month")).data,
+  });
+
   const summaryCards = [
     { label: "Current Month Income", value: data?.currentMonthIncome ?? 0, tone: "success" },
     { label: "Current Month Expense", value: data?.currentMonthExpense ?? 0, tone: "danger" },
     { label: "Net Balance", value: data?.netBalance ?? 0, tone: "primary" },
   ];
-  const categorySpend = data?.spendingByCategory ?? [];
+  const healthScoreValue = Math.max(0, Math.min(100, Math.round(healthScore?.score ?? 0)));
+  const healthDonutData = [
+    { label: "Score", value: healthScoreValue, color: "#14b8a6" },
+    { label: "Remaining", value: Math.max(0, 100 - healthScoreValue), color: "rgba(148, 163, 184, 0.25)" },
+  ];
+  const healthFactorPalette = ["#22c55e", "#06b6d4", "#f59e0b", "#6366f1", "#ef4444"];
+  const categorySpend = [...(data?.spendingByCategory ?? [])].sort((a, b) => b.value - a.value);
   const totalCategorySpend = categorySpend.reduce((sum, item) => sum + item.value, 0);
-  const topCategories = categorySpend.slice(0, 6);
+  const topCategories = categorySpend.slice(0, 4);
+  const remainingCategorySpend = categorySpend.slice(4).reduce((sum, item) => sum + item.value, 0);
+  const categorySpendChartData = remainingCategorySpend > 0
+    ? [...topCategories, { label: "Others", value: remainingCategorySpend, color: "#cbd5e1" }]
+    : topCategories;
 
   return (
     <AppShell title="Dashboard">
@@ -85,8 +105,8 @@ export function DashboardPage() {
                 <div className="donut-panel__visual">
                   <ResponsiveContainer width="100%" height={280}>
                     <PieChart>
-                      <Pie data={categorySpend} dataKey="value" nameKey="label" innerRadius={78} outerRadius={108} stroke="none">
-                        {categorySpend.map((item) => (
+                      <Pie data={categorySpendChartData} dataKey="value" nameKey="label" innerRadius={78} outerRadius={108} stroke="none">
+                        {categorySpendChartData.map((item) => (
                           <Cell key={item.label} fill={item.color} />
                         ))}
                       </Pie>
@@ -126,7 +146,7 @@ export function DashboardPage() {
           </div>
         </Card>
 
-        <Card title="Income vs Expense Trend" className="dashboard-card dashboard-card--chart">
+        <Card title="Income vs Expense Trend" className="dashboard-card dashboard-card--chart dashboard-card--paired">
           <div className="chart-box">
             {(data?.incomeExpenseTrend?.length ?? 0) > 0 ? (
               <ResponsiveContainer width="100%" height={280}>
@@ -155,9 +175,31 @@ export function DashboardPage() {
           </div>
         </Card>
 
+        <Card title="Goal Progress" className="dashboard-card dashboard-card--chart dashboard-card--paired">
+          <div className="chart-box">
+            {(data?.savingsGoals?.length ?? 0) > 0 ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={data?.savingsGoals ?? []}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" hide />
+                  <YAxis />
+                  <Tooltip formatter={(value) => `${Array.isArray(value) ? value[0] : value ?? 0}%`} />
+                  <Bar dataKey="progressPercent" radius={[12, 12, 0, 0]}>
+                    {(data?.savingsGoals ?? []).map((item) => (
+                      <Cell key={item.id} fill={item.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="empty-state">Goal progress will show here once you create savings goals.</div>
+            )}
+          </div>
+        </Card>
+
         <Card title="Recent Transactions" className="dashboard-card dashboard-card--compact">
           <div className="list-stack">
-            {(data?.recentTransactions ?? []).map((item) => (
+            {(data?.recentTransactions ?? []).slice(0, 5).map((item) => (
               <div key={item.id} className="list-row">
                 <div>
                   <strong>{item.merchant}</strong>
@@ -191,25 +233,83 @@ export function DashboardPage() {
           </div>
         </Card>
 
-        <Card title="Goal Progress" className="dashboard-card dashboard-card--chart">
-          <div className="chart-box">
-            {(data?.savingsGoals?.length ?? 0) > 0 ? (
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={data?.savingsGoals ?? []}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" hide />
-                  <YAxis />
-                  <Tooltip formatter={(value) => `${Array.isArray(value) ? value[0] : value ?? 0}%`} />
-                  <Bar dataKey="progressPercent" radius={[12, 12, 0, 0]}>
-                    {(data?.savingsGoals ?? []).map((item) => (
-                      <Cell key={item.id} fill={item.color} />
+        <Card title="Financial Health" className="dashboard-card dashboard-card--paired dashboard-card--compact dashboard-card--balanced">
+          <div className="financial-health">
+            <div className="financial-health__visual">
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie
+                    data={healthDonutData}
+                    dataKey="value"
+                    nameKey="label"
+                    innerRadius={62}
+                    outerRadius={86}
+                    startAngle={90}
+                    endAngle={-270}
+                    stroke="none"
+                  >
+                    {healthDonutData.map((item) => (
+                      <Cell key={item.label} fill={item.color} />
                     ))}
-                  </Bar>
-                </BarChart>
+                  </Pie>
+                </PieChart>
               </ResponsiveContainer>
-            ) : (
-              <div className="empty-state">Goal progress will show here once you create savings goals.</div>
-            )}
+              <div className="financial-health__center">
+                <span>Health score</span>
+                <strong>{healthScoreValue}</strong>
+                <small>/100</small>
+              </div>
+            </div>
+
+            <div className="financial-health__meta">
+              {(healthScore?.factors ?? []).slice(0, 4).map((factor, index) => (
+                <div key={factor.name} className="financial-health__factor">
+                  <div className="financial-health__factor-head">
+                    <strong>{factor.name}</strong>
+                    <span>{Math.round(factor.score)}%</span>
+                  </div>
+                  <div className="progress-track">
+                    <div
+                      className="progress-fill"
+                      style={{
+                        width: `${Math.max(0, Math.min(100, factor.score))}%`,
+                        background: healthFactorPalette[index % healthFactorPalette.length],
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+              {(healthScore?.suggestions ?? []).slice(0, 1).map((item) => (
+                <div key={item} className="financial-health__tip">
+                  {item}
+                </div>
+              ))}
+              {!(healthScore?.factors?.length ?? 0) && <div className="financial-health__tip">Health score details will appear after more data is available.</div>}
+            </div>
+          </div>
+        </Card>
+
+        <Card title="Cash Flow Forecast" className="dashboard-card dashboard-card--paired dashboard-card--compact dashboard-card--balanced">
+          <div className="list-stack">
+            <div className="list-row list-row--aligned">
+              <div>
+                <strong>Projected end-of-month balance</strong>
+                <span>Current {currency(forecastMonth?.currentBalance ?? 0)}</span>
+              </div>
+              <strong>{currency(forecastMonth?.projectedEndOfMonthBalance ?? 0)}</strong>
+            </div>
+            <div className="list-row list-row--aligned">
+              <div>
+                <strong>Safe to spend</strong>
+                <span>Available after reserve buffer.</span>
+              </div>
+              <strong>{currency(forecastMonth?.safeToSpend ?? 0)}</strong>
+            </div>
+            {(forecastMonth?.riskWarnings ?? []).slice(0, 2).map((warning) => (
+              <div key={warning} className="list-row list-row--aligned">
+                <span>{warning}</span>
+              </div>
+            ))}
           </div>
         </Card>
       </div>

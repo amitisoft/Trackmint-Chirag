@@ -3,7 +3,7 @@ import { createContext, useContext, useMemo, useState } from "react";
 type Toast = {
   id: number;
   message: string;
-  tone?: "success" | "error";
+  tone?: "success" | "error" | "warning";
 };
 
 type ToastContextValue = {

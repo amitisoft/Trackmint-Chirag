@@ -31,6 +31,32 @@ public sealed class AccountBalanceTrendItem
     public required decimal Balance { get; init; }
 }
 
+public sealed class CategoryTrendItem
+{
+    public required string Label { get; init; }
+    public required string Category { get; init; }
+    public required decimal Amount { get; init; }
+}
+
+public sealed class SavingsRateTrendItem
+{
+    public required string Label { get; init; }
+    public required decimal SavingsRatePercent { get; init; }
+}
+
+public sealed class ReportTrendsResponse
+{
+    public required IReadOnlyCollection<IncomeExpenseTrendItem> IncomeExpense { get; init; }
+    public required IReadOnlyCollection<SavingsRateTrendItem> SavingsRate { get; init; }
+    public required IReadOnlyCollection<CategoryTrendItem> CategoryTrends { get; init; }
+}
+
+public sealed class NetWorthPoint
+{
+    public required string Label { get; init; }
+    public required decimal NetWorth { get; init; }
+}
+
 public sealed class ExportFileResponse
 {
     public required string FileName { get; init; }

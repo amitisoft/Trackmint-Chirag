@@ -4,12 +4,16 @@ using PersonalFinanceTracker.Application.DTOs.Goals;
 using PersonalFinanceTracker.Application.DTOs.Recurring;
 using PersonalFinanceTracker.Application.DTOs.Transactions;
 using PersonalFinanceTracker.Domain.Entities;
+using PersonalFinanceTracker.Domain.Enums;
 
 namespace PersonalFinanceTracker.Infrastructure.Services;
 
 internal static class EntityMapper
 {
     public static AccountResponse ToResponse(this Account account) =>
+        account.ToResponse(AccountMemberRole.Owner, false, account.User?.DisplayName);
+
+    public static AccountResponse ToResponse(this Account account, AccountMemberRole role, bool isShared, string? ownerDisplayName) =>
         new()
         {
             Id = account.Id,
@@ -18,7 +22,10 @@ internal static class EntityMapper
             OpeningBalance = account.OpeningBalance,
             CurrentBalance = account.CurrentBalance,
             InstitutionName = account.InstitutionName,
-            UpdatedAt = account.UpdatedAt
+            UpdatedAt = account.UpdatedAt,
+            AccessRole = role,
+            IsShared = isShared,
+            OwnerDisplayName = ownerDisplayName
         };
 
     public static CategoryResponse ToResponse(this Category category) =>

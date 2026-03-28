@@ -11,6 +11,9 @@ public sealed class AccountResponse
     public required decimal CurrentBalance { get; init; }
     public string? InstitutionName { get; init; }
     public required DateTime UpdatedAt { get; init; }
+    public required AccountMemberRole AccessRole { get; init; }
+    public required bool IsShared { get; init; }
+    public string? OwnerDisplayName { get; init; }
 }
 
 public sealed class CreateAccountRequest

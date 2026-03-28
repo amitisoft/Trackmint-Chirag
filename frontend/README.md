@@ -48,8 +48,10 @@ For GitHub, keep only `frontend/.env.example` in the repo. Do not commit a real 
 - budgets
 - goals
 - reports
+- insights (health score + forecasting)
+- rules engine
 - recurring transactions
-- accounts
+- accounts (including shared account members)
 - settings and category management
 
 ## Notes

@@ -126,7 +126,7 @@ export function LoginPage() {
   const setSession = useAuthStore((state) => state.setSession);
   const { showToast } = useToast();
   const [rememberMe, setRememberMe] = useState(true);
-  const form = useForm<z.infer<typeof loginSchema>>({ resolver: zodResolver(loginSchema) });
+  const form = useForm<z.infer<typeof loginSchema>>({ resolver: zodResolver(loginSchema), mode: "onChange" });
 
   const mutation = useMutation({
     mutationFn: async (values: z.infer<typeof loginSchema>) => {
@@ -147,13 +147,13 @@ export function LoginPage() {
     <AuthLayout variant="login" title="Welcome back to your finances" subtitle="Secure login with encrypted authentication.">
       <form className="trackmint-form" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
         <label className="trackmint-field">
-          <span>Email</span>
+          <span>Email <span className="required-marker">*</span></span>
           <input type="email" placeholder="you@example.com" {...form.register("email")} />
           <FormError message={form.formState.errors.email?.message} />
         </label>
 
         <label className="trackmint-field">
-          <span>Password</span>
+          <span>Password <span className="required-marker">*</span></span>
           <input type="password" placeholder="Enter your password" {...form.register("password")} />
           <FormError message={form.formState.errors.password?.message} />
         </label>
@@ -166,7 +166,7 @@ export function LoginPage() {
           <Link to="/forgot-password">Forgot Password?</Link>
         </div>
 
-        <button className="trackmint-submit" type="submit" disabled={mutation.isPending}>
+        <button className="trackmint-submit" type="submit" disabled={!form.formState.isValid || mutation.isPending}>
           {mutation.isPending ? "Signing In..." : "Sign In"}
         </button>
       </form>
@@ -178,7 +178,7 @@ export function RegisterPage() {
   const navigate = useNavigate();
   const setSession = useAuthStore((state) => state.setSession);
   const { showToast } = useToast();
-  const form = useForm<z.infer<typeof registerSchema>>({ resolver: zodResolver(registerSchema) });
+  const form = useForm<z.infer<typeof registerSchema>>({ resolver: zodResolver(registerSchema), mode: "onChange" });
 
   const mutation = useMutation({
     mutationFn: async (values: z.infer<typeof registerSchema>) => {
@@ -199,24 +199,24 @@ export function RegisterPage() {
     <AuthLayout variant="register" title="Create your TrackMint account" subtitle="Set up your workspace and start managing money with clarity.">
       <form className="trackmint-form" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
         <label className="trackmint-field">
-          <span>Display name</span>
+          <span>Display name <span className="required-marker">*</span></span>
           <input type="text" placeholder="Your name" {...form.register("displayName")} />
           <FormError message={form.formState.errors.displayName?.message} />
         </label>
 
         <label className="trackmint-field">
-          <span>Email</span>
+          <span>Email <span className="required-marker">*</span></span>
           <input type="email" placeholder="you@example.com" {...form.register("email")} />
           <FormError message={form.formState.errors.email?.message} />
         </label>
 
         <label className="trackmint-field">
-          <span>Password</span>
+          <span>Password <span className="required-marker">*</span></span>
           <input type="password" placeholder="Create a strong password" {...form.register("password")} />
           <FormError message={form.formState.errors.password?.message} />
         </label>
 
-        <button className="trackmint-submit" type="submit" disabled={mutation.isPending}>
+        <button className="trackmint-submit" type="submit" disabled={!form.formState.isValid || mutation.isPending}>
           {mutation.isPending ? "Creating..." : "Create Account"}
         </button>
 
@@ -231,7 +231,7 @@ export function RegisterPage() {
 
 export function ForgotPasswordPage() {
   const { showToast } = useToast();
-  const form = useForm<z.infer<typeof forgotSchema>>({ resolver: zodResolver(forgotSchema) });
+  const form = useForm<z.infer<typeof forgotSchema>>({ resolver: zodResolver(forgotSchema), mode: "onChange" });
 
   const mutation = useMutation({
     mutationFn: async (values: z.infer<typeof forgotSchema>) => {
@@ -250,12 +250,12 @@ export function ForgotPasswordPage() {
     <AuthLayout variant="forgot" title="Reset your TrackMint access" subtitle="Generate a reset token and continue with a new password.">
       <form className="trackmint-form" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
         <label className="trackmint-field">
-          <span>Email</span>
+          <span>Email <span className="required-marker">*</span></span>
           <input type="email" placeholder="you@example.com" {...form.register("email")} />
           <FormError message={form.formState.errors.email?.message} />
         </label>
 
-        <button className="trackmint-submit" type="submit" disabled={mutation.isPending}>
+        <button className="trackmint-submit" type="submit" disabled={!form.formState.isValid || mutation.isPending}>
           {mutation.isPending ? "Generating..." : "Generate Reset Token"}
         </button>
 
@@ -272,7 +272,7 @@ export function ResetPasswordPage() {
   const navigate = useNavigate();
   const { showToast } = useToast();
   const passwordHint = useMemo(() => "At least 8 characters with uppercase, lowercase, and a number", []);
-  const form = useForm<z.infer<typeof resetSchema>>({ resolver: zodResolver(resetSchema) });
+  const form = useForm<z.infer<typeof resetSchema>>({ resolver: zodResolver(resetSchema), mode: "onChange" });
 
   const mutation = useMutation({
     mutationFn: async (values: z.infer<typeof resetSchema>) => {
@@ -291,18 +291,18 @@ export function ResetPasswordPage() {
     <AuthLayout variant="reset" title="Set a new password" subtitle="Paste your reset token and secure your TrackMint account again.">
       <form className="trackmint-form" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
         <label className="trackmint-field">
-          <span>Reset token</span>
+          <span>Reset token <span className="required-marker">*</span></span>
           <input type="text" placeholder="Paste the generated token" {...form.register("token")} />
           <FormError message={form.formState.errors.token?.message} />
         </label>
 
         <label className="trackmint-field">
-          <span>New password</span>
+          <span>New password <span className="required-marker">*</span></span>
           <input type="password" placeholder="Create a new password" {...form.register("password")} />
           <small>{form.formState.errors.password?.message ?? passwordHint}</small>
         </label>
 
-        <button className="trackmint-submit" type="submit" disabled={mutation.isPending}>
+        <button className="trackmint-submit" type="submit" disabled={!form.formState.isValid || mutation.isPending}>
           {mutation.isPending ? "Resetting..." : "Reset Password"}
         </button>
 

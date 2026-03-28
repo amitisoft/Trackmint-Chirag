@@ -8,9 +8,10 @@ import { Card } from "../../components/common/Card";
 import { Modal } from "../../components/common/Modal";
 import { OverflowMenu } from "../../components/common/OverflowMenu";
 import { Pagination } from "../../components/common/Pagination";
+import { FieldHelp } from "../../components/common/FieldHelp";
 import { api } from "../../services/api/client";
 import { useToast } from "../../components/common/ToastProvider";
-import type { Account, Category, PagedResult, Transaction, TransactionType } from "../../types/models";
+import type { Account, Budget, Category, PagedResult, Rule, Transaction, TransactionType } from "../../types/models";
 
 const transactionSchema = z.object({
   accountId: z.string().min(1),
@@ -23,12 +24,68 @@ const transactionSchema = z.object({
   merchant: z.string().optional(),
   paymentMethod: z.string().optional(),
   tags: z.string().optional(),
+}).superRefine((values, context) => {
+  if (values.type !== "Transfer") {
+    return;
+  }
+
+  if (!values.destinationAccountId) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Destination account is required for transfer",
+      path: ["destinationAccountId"],
+    });
+  }
+
+  if (values.destinationAccountId && values.destinationAccountId === values.accountId) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Destination account must be different from source account",
+      path: ["destinationAccountId"],
+    });
+  }
 });
 
 type TransactionFormValues = z.infer<typeof transactionSchema>;
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value);
+}
+
+function extractRuleAlerts(note?: string) {
+  if (!note) {
+    return [];
+  }
+
+  const matches = [...note.matchAll(/\[Rule Alert:\s*([^\]]+)\]/gi)];
+  return matches
+    .map((item) => item[1]?.trim())
+    .filter((item): item is string => Boolean(item));
+}
+
+async function getBudgetThresholdAlert(transaction: Transaction) {
+  if (transaction.type !== "Expense" || !transaction.categoryId) {
+    return null;
+  }
+
+  const [yearText, monthText] = transaction.date.split("-");
+  const year = Number(yearText);
+  const month = Number(monthText);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
+    return null;
+  }
+
+  const budgets = (await api.get<Budget[]>("/budgets", { params: { month, year } })).data;
+  const matchingBudget = budgets.find((item) => item.categoryId === transaction.categoryId);
+  if (!matchingBudget) {
+    return null;
+  }
+
+  if (matchingBudget.utilizationPercent < matchingBudget.alertThresholdPercent) {
+    return null;
+  }
+
+  return `${matchingBudget.categoryName} crossed budget alert at ${matchingBudget.utilizationPercent.toFixed(0)}% (threshold ${matchingBudget.alertThresholdPercent}%).`;
 }
 
 export function TransactionsPage() {
@@ -48,6 +105,10 @@ export function TransactionsPage() {
   const { data: categories = [] } = useQuery({
     queryKey: ["categories"],
     queryFn: async () => (await api.get<Category[]>("/categories")).data,
+  });
+  const { data: rules = [] } = useQuery({
+    queryKey: ["rules"],
+    queryFn: async () => (await api.get<Rule[]>("/rules")).data,
   });
 
   const { data } = useQuery({
@@ -92,6 +153,7 @@ export function TransactionsPage() {
 
   const form = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionSchema),
+    mode: "onChange",
     values: defaultValues,
   });
 
@@ -105,18 +167,32 @@ export function TransactionsPage() {
       };
 
       if (editing?.id) {
-        await api.put(`/transactions/${editing.id}`, payload);
+        const response = await api.put<Transaction>(`/transactions/${editing.id}`, payload);
+        return response.data;
       } else {
-        await api.post("/transactions", payload);
+        const response = await api.post<Transaction>("/transactions", payload);
+        return response.data;
       }
     },
-    onSuccess: () => {
+    onSuccess: async (savedTransaction) => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
       queryClient.invalidateQueries({ queryKey: ["accounts"] });
-      showToast(editing ? "Transaction updated" : "Transaction saved");
+      const alerts = extractRuleAlerts(savedTransaction.note);
+      const budgetAlert = await getBudgetThresholdAlert(savedTransaction);
+      if (alerts.length) {
+        showToast(`${editing ? "Transaction updated" : "Transaction saved"} • Alert: ${alerts.join(" | ")}`, "warning");
+      } else {
+        showToast(editing ? "Transaction updated" : "Transaction saved");
+      }
+      if (budgetAlert) {
+        showToast(budgetAlert, "warning");
+      }
       setIsCreateOpen(false);
       setEditing(null);
+    },
+    onError: (error: any) => {
+      showToast(error?.response?.data?.message ?? "Unable to save transaction. Please check required fields.", "error");
     },
   });
 
@@ -131,6 +207,15 @@ export function TransactionsPage() {
       showToast("Transaction deleted");
     },
   });
+  const selectedType = form.watch("type");
+  const selectedCategoryId = form.watch("categoryId");
+  const matchingCategories = categories.filter((category) => category.type === selectedType);
+  const hasAutoCategoryRule = rules.some((rule) => rule.isActive && rule.actionType === "SetCategory");
+  const requiresCategorySelection = selectedType !== "Transfer" && !hasAutoCategoryRule;
+  const canSubmit = form.formState.isValid
+    && !saveMutation.isPending
+    && accounts.length > 0
+    && (!requiresCategorySelection || Boolean(selectedCategoryId));
 
   return (
     <AppShell title="Transactions">
@@ -236,7 +321,10 @@ export function TransactionsPage() {
       >
         <form className="form-grid" onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}>
           <label>
-            Type
+            <span className="label-inline">
+              Type <span className="required-marker">*</span>
+              <FieldHelp text="Income adds money, Expense deducts money, Transfer moves money between accounts." />
+            </span>
             <select {...form.register("type")}>
               <option value="Expense">Expense</option>
               <option value="Income">Income</option>
@@ -244,15 +332,22 @@ export function TransactionsPage() {
             </select>
           </label>
           <label>
-            Amount
+            <span className="label-inline">
+              Amount <span className="required-marker">*</span>
+            </span>
             <input type="number" step="0.01" {...form.register("amount", { valueAsNumber: true })} />
           </label>
           <label>
-            Date
+            <span className="label-inline">
+              Date <span className="required-marker">*</span>
+            </span>
             <input type="date" {...form.register("date")} />
           </label>
           <label>
-            Source account
+            <span className="label-inline">
+              Source account <span className="required-marker">*</span>
+              <FieldHelp text="Account from which this transaction amount is taken." />
+            </span>
             <select {...form.register("accountId")} disabled={!accounts.length}>
               {!accounts.length && <option value="">Create an account first</option>}
               {accounts.map((account) => (
@@ -263,9 +358,12 @@ export function TransactionsPage() {
             </select>
             {!accounts.length && <small className="field-hint field-hint--warning">No source account available. Create one in Accounts first.</small>}
           </label>
-          {form.watch("type") === "Transfer" ? (
+          {selectedType === "Transfer" ? (
             <label>
-              Destination account
+              <span className="label-inline">
+                Destination account <span className="required-marker">*</span>
+                <FieldHelp text="Account where transfer amount should be added." />
+              </span>
               <select {...form.register("destinationAccountId")} disabled={accounts.length < 2}>
                 <option value="">Select account</option>
                 {accounts.map((account) => (
@@ -278,19 +376,27 @@ export function TransactionsPage() {
             </label>
           ) : (
             <label>
-              Category
-              <select {...form.register("categoryId")} disabled={!categories.filter((category) => category.type === form.watch("type")).length}>
-                <option value="">{categories.filter((category) => category.type === form.watch("type")).length ? "Select category" : "Create a matching category first"}</option>
+              <span className="label-inline">
+                Category
+                <FieldHelp text="Optional only when an active SetCategory rule is configured. Otherwise choose category manually." />
+              </span>
+              <select {...form.register("categoryId")} disabled={!matchingCategories.length}>
+                <option value="">{matchingCategories.length ? "Select category" : "Create a matching category first"}</option>
                 {categories
-                  .filter((category) => category.type === form.watch("type"))
+                  .filter((category) => category.type === selectedType)
                   .map((category) => (
                     <option key={category.id} value={category.id}>
                       {category.name}
                     </option>
                   ))}
               </select>
-              {!categories.filter((category) => category.type === form.watch("type")).length && (
-                <small className="field-hint field-hint--warning">No {form.watch("type").toLowerCase()} category found. Create one in Settings first.</small>
+              {!matchingCategories.length ? (
+                <small className="field-hint field-hint--warning">No {selectedType.toLowerCase()} category found. Create one in Settings first.</small>
+              ) : (
+                <small className="field-hint">Optional if your active rule auto-sets category.</small>
+              )}
+              {requiresCategorySelection && !selectedCategoryId && (
+                <small className="field-hint field-hint--warning">Category is required because no active SetCategory rule is available.</small>
               )}
             </label>
           )}
@@ -307,10 +413,14 @@ export function TransactionsPage() {
             <textarea rows={3} {...form.register("note")} />
           </label>
           <label>
-            Tags
+            <span className="label-inline">
+              Tags
+              <FieldHelp text="Enter comma-separated values like groceries, family, business." />
+            </span>
             <input type="text" placeholder="groceries, family" {...form.register("tags")} />
           </label>
-          <button type="submit" className="primary-button" disabled={saveMutation.isPending}>
+          {!form.formState.isValid && <small className="field-hint field-hint--warning">Complete required fields marked with * to continue.</small>}
+          <button type="submit" className="primary-button" disabled={!canSubmit}>
             {saveMutation.isPending ? "Saving..." : "Save transaction"}
           </button>
         </form>

@@ -7,6 +7,7 @@ import { AppShell } from "../../components/layout/AppShell";
 import { Card } from "../../components/common/Card";
 import { Modal } from "../../components/common/Modal";
 import { OverflowMenu } from "../../components/common/OverflowMenu";
+import { FieldHelp } from "../../components/common/FieldHelp";
 import { api } from "../../services/api/client";
 import { useToast } from "../../components/common/ToastProvider";
 import type { Budget, Category } from "../../types/models";
@@ -42,6 +43,7 @@ export function BudgetsPage() {
 
   const form = useForm<BudgetFormValues>({
     resolver: zodResolver(budgetSchema),
+    mode: "onChange",
     values: useMemo(
       () => ({
         categoryId: editing?.categoryId ?? "",
@@ -53,6 +55,22 @@ export function BudgetsPage() {
       [editing],
     ),
   });
+  const selectedMonth = form.watch("month");
+  const selectedYear = form.watch("year");
+  const selectedCategoryId = form.watch("categoryId");
+
+  const { data: selectedPeriodBudgets = [] } = useQuery({
+    queryKey: ["budgets-selected-period", selectedMonth, selectedYear],
+    enabled: Boolean(isCreateOpen && !editing && selectedMonth && selectedYear),
+    queryFn: async () =>
+      (await api.get<Budget[]>("/budgets", { params: { month: selectedMonth, year: selectedYear } })).data,
+  });
+
+  const hasDuplicateBudget = Boolean(
+    !editing &&
+      selectedCategoryId &&
+      selectedPeriodBudgets.some((item) => item.categoryId === selectedCategoryId),
+  );
 
   const mutation = useMutation({
     mutationFn: async (values: BudgetFormValues) => {
@@ -68,6 +86,9 @@ export function BudgetsPage() {
       showToast(editing ? "Budget updated" : "Budget created");
       setIsCreateOpen(false);
       setEditing(null);
+    },
+    onError: (error: any) => {
+      showToast(error?.response?.data?.message ?? "Unable to save budget", "error");
     },
   });
 
@@ -126,7 +147,24 @@ export function BudgetsPage() {
         setIsCreateOpen(false);
         setEditing(null);
       }}>
-        <BudgetForm categories={categories} form={form} onSubmit={(values) => mutation.mutate(values)} isLoading={mutation.isPending} disabledCategory={Boolean(editing)} />
+        <BudgetForm
+          categories={categories}
+          form={form}
+          onSubmit={(values) => {
+            if (!editing) {
+              const duplicate = selectedPeriodBudgets.some((item) => item.categoryId === values.categoryId);
+              if (duplicate) {
+                showToast("Budget already exists for this category and month.", "error");
+                return;
+              }
+            }
+
+            mutation.mutate(values);
+          }}
+          isLoading={mutation.isPending}
+          disabledCategory={Boolean(editing)}
+          hasDuplicateBudget={hasDuplicateBudget}
+        />
       </Modal>
     </AppShell>
   );
@@ -138,46 +176,62 @@ function BudgetForm({
   onSubmit,
   isLoading,
   disabledCategory,
+  hasDuplicateBudget,
 }: {
   categories: Category[];
   form: UseFormReturn<BudgetFormValues>;
   onSubmit: (values: BudgetFormValues) => void;
   isLoading: boolean;
   disabledCategory?: boolean;
+  hasDuplicateBudget?: boolean;
 }) {
+  const availableExpenseCategories = categories.filter((category) => category.type === "Expense");
+  const canSubmit = form.formState.isValid && !isLoading && availableExpenseCategories.length > 0 && !hasDuplicateBudget;
+
   return (
     <form className="form-grid" onSubmit={form.handleSubmit(onSubmit)}>
       <label>
-        Category
-        <select {...form.register("categoryId")} disabled={disabledCategory || !categories.filter((category) => category.type === "Expense").length}>
-          <option value="">{categories.filter((category) => category.type === "Expense").length ? "Select category" : "Create an expense category first"}</option>
-          {categories
-            .filter((category) => category.type === "Expense")
-            .map((category) => (
+        <span className="label-inline">
+          Category <span className="required-marker">*</span>
+        </span>
+        <select {...form.register("categoryId")} disabled={disabledCategory || !availableExpenseCategories.length}>
+          <option value="">{availableExpenseCategories.length ? "Select category" : "Create an expense category first"}</option>
+          {availableExpenseCategories.map((category) => (
               <option key={category.id} value={category.id}>
                 {category.name}
               </option>
             ))}
         </select>
-        {!categories.filter((category) => category.type === "Expense").length && <small className="field-hint field-hint--warning">No expense category available. Create one in Settings first.</small>}
+        {!availableExpenseCategories.length && <small className="field-hint field-hint--warning">No expense category available. Create one in Settings first.</small>}
       </label>
       <label>
-        Month
+        <span className="label-inline">
+          Month <span className="required-marker">*</span>
+        </span>
         <input type="number" {...form.register("month", { valueAsNumber: true })} disabled={disabledCategory} />
       </label>
       <label>
-        Year
+        <span className="label-inline">
+          Year <span className="required-marker">*</span>
+        </span>
         <input type="number" {...form.register("year", { valueAsNumber: true })} disabled={disabledCategory} />
       </label>
       <label>
-        Budget amount
+        <span className="label-inline">
+          Budget amount <span className="required-marker">*</span>
+        </span>
         <input type="number" step="0.01" {...form.register("amount", { valueAsNumber: true })} />
       </label>
       <label>
-        Alert threshold %
+        <span className="label-inline">
+          Alert threshold % <span className="required-marker">*</span>
+          <FieldHelp text="You get warned when spending reaches this percent of your budget." />
+        </span>
         <input type="number" {...form.register("alertThresholdPercent", { valueAsNumber: true })} />
       </label>
-      <button type="submit" className="primary-button" disabled={isLoading}>
+      {hasDuplicateBudget && <small className="field-hint field-hint--warning">Budget already exists for this category and month. Edit the existing one instead.</small>}
+      {!form.formState.isValid && <small className="field-hint field-hint--warning">Complete required fields marked with * to continue.</small>}
+      <button type="submit" className="primary-button" disabled={!canSubmit}>
         {isLoading ? "Saving..." : "Save budget"}
       </button>
     </form>
