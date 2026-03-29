@@ -181,7 +181,7 @@ export function TransactionsPage() {
       const alerts = extractRuleAlerts(savedTransaction.note);
       const budgetAlert = await getBudgetThresholdAlert(savedTransaction);
       if (alerts.length) {
-        showToast(`${editing ? "Transaction updated" : "Transaction saved"} • Alert: ${alerts.join(" | ")}`, "warning");
+        showToast(`${editing ? "Transaction updated" : "Transaction saved"} - Alert: ${alerts.join(" | ")}`, "warning");
       } else {
         showToast(editing ? "Transaction updated" : "Transaction saved");
       }
